@@ -106,7 +106,7 @@ def findCPUIDSupportSME(nonVerbose):
         #bit 0 is 1, test passes
         if bit0 == '1':
             passCheck = True
-            foundResult = "EAX bit 0 is " + "'" + str(bit0) + "'"
+            foundResult = "EAX bit 0 is " + "'" + bit0 + "'"
         #bit 0 is 0, test fails
         else:
             foundResult = "EAX bit 0 is " + "'" + str(bit0) + "'"
@@ -161,6 +161,8 @@ def findCPUIDSupportSEV(nonVerbose):
         #Check for eax bit 1 value to find SEV support
         bit1 = checkEAX(readOut, 'SEV')
         #Bit 1 is 1, test passes
+        # TODO
+        #Can clean this up, less mess by not using variable
         if bit1 == "1":
             passCheck = True
             foundResult = "EAX bit 1 is " + "'" + str(bit1) + "'"
@@ -665,10 +667,15 @@ def findLibVirtSupport(nonVerbose):
             foundResult = libVirtVersion
         #Version doen't meet the minimum, test fails
         else:
-            foundResult - libVirtVersion
+            foundResult = libVirtVersion
     #Nothing is found, test fails
     else:
         foundResult = "EMPTY"
+# TODO
+# Global variable for nonVerbose, cleaner code.
+# Look into loggers instead of print statements.
+# PEP8 formatting
+# Unit tests
 
     #Return test results
     if nonVerbose:
@@ -842,7 +849,9 @@ def getOVMFPaths(nonVerbose,defaultPath,pkgInstalled,pckgInstallDate,minCommit):
         if OVMFFunctions.compareOVMFVersion(pckgInstallDate, minCommit):
             if not nonVerbose:
                 print("- OVMF Path Found: " + defaultPath + " Commit date Found: " + pckgInstallDate.strftime("%Y-%m-%d ") + ' Expected: commit ' + minCommit + ' ' + colors.green + "OK" + colors.reset)
-            pathTrue = True
+            # TODO
+            #Double check if it is onePathTrue what I meant
+            # pathTrue = True
         #Default package does not meet the minimum
         else:
             if not nonVerbose:

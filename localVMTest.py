@@ -26,6 +26,10 @@ def getVirtualMachines(version):
     vms = subprocess.Popen('ps axo pid,command | egrep ' +  qemuCommand,shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     
     #Loop to get available VMs and their PIDs, put them into the dictionary.
+    
+    # TODO
+    #Double check readline, unit test
+
     for line in iter(vms.stdout.readline, b''):
         currVM = line.decode("utf-8")
         currVM = currVM.lstrip()
@@ -202,7 +206,7 @@ def runLocalVMTest(version,testedVM,nonVerbose):
                 vmsList[currInput] = availableVMs[currInput].strip()
                 print('Virtual Machine ' + currInput + ' has been added.')
             #Input provided is not a valid PID
-            elif not currInput.isnumeric or currInput not in availableVMs.values():
+            elif not currInput.isnumeric() or currInput not in availableVMs.values():
                 print('Not a valid number or PID.')
             #Input provided already added
             elif currInput in vmsList.keys():

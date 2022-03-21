@@ -104,6 +104,9 @@ def cleanUpMachine(currDirectory):
         os.system('rm ' + os.path.abspath(currDirectory + '/autoVM/OVMF_WRITE.bin'))
         os.system('rm ' + os.path.abspath(currDirectory + '/autoVM/OVMF_READ.bin'))
 
+        # TODO
+        #Use os removes instead of system rm, probably other utilities where I use system instead of a more efficient utility.
+
 
 def automaticVMTest(version,nonVerbose):
     '''

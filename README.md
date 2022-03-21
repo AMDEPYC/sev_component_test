@@ -16,7 +16,7 @@
     - [Auto VM Test](#automatic-virtual-machine-test)
 
 # SEV component test
-This script is used to query a host system capabilities to run SEV or SEV-ES encrypted virtual machines. It also checks for SME compatibility. It will run checks of several different components and it will allow us to know if the host system is set-up correctly in order to support SEV features. If there are any more questions regarding SME, SEV or SEV-ES please visit [AMD'S SEV developer website](https://developer.amd.com/sev/).
+This script is used to query a host system's capabilities to run SEV or SEV-ES encrypted virtual machines. It also checks for SME compatibility. It will run checks of several different components, and it will allow us to know if the host system is set-up correctly in order to support SEV features. If there are any more questions regarding SME, SEV or SEV-ES please visit [AMD'S SEV developer website](https://developer.amd.com/sev/).
 
 # Setting up host OS
 All OS distributions need to install 2 packages in order to run this tool. Installation for each package differs depending on the distro.
