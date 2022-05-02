@@ -289,17 +289,6 @@ def run_component_tests(non_verbose, system_os, stop_failure, feature_tests):
         if not non_verbose:
             print_overall_result(
                 test_description[-1], results[test_description[-1]])
-        # if test == check_system_support_test:
-        #     results[test_description[0]] = test(test_description[1])
-        #     if not nonv_verbose:
-        #         print_overall_result(
-        #             test_description[0], results[test_description[0]])
-        # else:
-        #     results[test_description] = test()
-        #     if not nonv_verbose:
-        #         print_overall_result(
-        #             test_description, results[test_description])
-
     if False not in results.values():
         all_tests_pass = True
 
