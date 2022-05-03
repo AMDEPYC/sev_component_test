@@ -202,7 +202,7 @@ def get_commit_date(path):
 
     try:
         # Command to get git summary from which we can get the commit date
-        git_command = "git --git-dir " + git_path + ".git show --summary"
+        git_command = "git --git-dir /" + git_path + ".git show"
         git_summary = subprocess.run(
             git_command, shell=True, check=True, capture_output=True)
         git_date_raw = subprocess.run("grep Date", input=git_summary.stdout,
