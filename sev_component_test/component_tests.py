@@ -6,7 +6,6 @@ import subprocess
 import re
 import os
 from packaging import version
-# from . import ovmf_shared_functions
 import ovmf_shared_functions
 
 def hex_to_binary(hex_num: str) -> bin:

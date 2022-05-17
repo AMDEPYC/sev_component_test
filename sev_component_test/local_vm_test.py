@@ -4,7 +4,6 @@ Functions required to print and test the memory of VMs being run in the host sys
 import string
 import subprocess
 from re import sub
-# from . import memory_reader, encryption_test
 import memory_reader
 import encryption_test
 

@@ -9,13 +9,13 @@ Use --testlocal flag to test encryption of VMs being run already.
 Use --printlocal flag to print the memory of VMs being run.
     Can provide VM command to specify one desired VM, or not provide anything to launch UI.
 Use --autotest flag to launch automatic VM encryption test on the tiny VM provided.
+    Can ask to perform an unencrypted test or sev test (sev default). (sev-es functionality still in progress)
 Use --nonVerbose flag to run program without any prints
 Will return 1 if any of the desired tests fails, will return 0 if all the desired tests pass.
 '''
 import argparse
 import datetime
 import sys
-# from . import component_tests, local_vm_test, auto_vm_test
 import component_tests
 import local_vm_test
 import auto_vm_test
@@ -30,17 +30,11 @@ parser.add_argument("-tl", "--testlocal", nargs='?', help="Run test local functi
                     default="not raised")
 parser.add_argument("-pl", "--printlocal", nargs='?', help="Run print local functionality.",
                     default="not raised")
-parser.add_argument("-at", "--autotest", help="Run automatic encryption test functionality.",
-                    action="store_true")
+parser.add_argument("-at", "--autotest", nargs='?',
+                    help="Run automatic encryption test functionality.",
+                    default="not raised")
 parser.add_argument("-nv", "--nonverbose", help="Run test with no print statements.",
                     action="store_true")
-# args = parser.parse_args()
-
-# NONVERBOSE = args.nonverbose  # Global non verbose variable
-# STOPFAILURE = args.stopfailure  # Global stop at failure variable
-
-# SYSTEMOS, _ = component_tests.get_linux_distro()  # Global SYSTEMOS
-
 
 def print_test_result(component, command, found, expectation, result):
     '''
@@ -168,7 +162,7 @@ def run_sev_test(non_verbose, system_os, stop_failure):
 
     # Will turn false if any check fails
     pass_check = True
-
+    # Tests to be run
     running_tests = {
         component_tests.check_linux_distribution: [],
         component_tests.check_kernel: ['SEV'],
@@ -181,6 +175,7 @@ def run_sev_test(non_verbose, system_os, stop_failure):
             system_os, datetime.date(2018, 7, 6)]
     }
 
+    #Run all tests
     for test, components in running_tests.items():
         if test == component_tests.test_all_ovmf_paths:
             current_test_result, ovmf_paths = test(*components)
@@ -342,18 +337,29 @@ def main():
         local_vm_test.run_print_memory(system_os, args.printlocal, args.nonverbose)
 
     # auto test feature has been raised
-    if args.autotest:
+    if args.autotest != "not raised":
+        auto_test_result = False
         # Auto test will not run if the SEV test does not pass
-        if not sev_pass:
-            if not args.nonverbose:
-                print("SEV Component Test failed. SEV Machine cannot be launched.")
-        else:
-            if not args.nonverbose:
-                print("\nRunning automatic test for VM encryption:")
-            # If the automatic VM Encryption test fails, overall test fails.
-            if not auto_vm_test.automatic_vm_test(system_os, args.nonverbose):
-                all_requested_tests_pass = False
-
+        if not sev_pass and not args.nonverbose:
+            print("SEV Component Test failed. SEV Machine cannot be launched.")
+        # sev passed tests, run the vm test
+        elif sev_pass:
+            # Invalid argument passed for auto test
+            if not args.autotest in ('sev', 'unencrypted', 'sev-es', None) and not args.nonverbose:
+                print('An invalid VM type was parsed. Cannot run auto vm test.')
+            # Valid argument passed
+            elif args.autotest in ('sev', 'unencrypted', 'sev-es', None):
+                if not args.nonverbose:
+                    print("\nRunning automatic test for VM encryption:")
+                # If no test is specified, run sev test
+                if args.autotest is None:
+                    auto_test_result =  auto_vm_test.automatic_vm_test(system_os, args.nonverbose,'sev')
+                # Run specified test
+                else:
+                    auto_test_result =  auto_vm_test.automatic_vm_test(system_os, args.nonverbose,args.autotest)
+        
+        # Grab result
+        all_requested_tests_pass = auto_test_result
 
     # Return program results
     if all_requested_tests_pass:
