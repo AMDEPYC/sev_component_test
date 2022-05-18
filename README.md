@@ -91,6 +91,7 @@ Comparing Host OS componenets to known SEV-ES minimum versions:
 - OMVF path install [ dpkg --list ] Found: /usr/share/OVMF/OVMF_VARS.fd 2019-11-22  Expected: 2020-11-01  FAIL
 SEV-ES COMPONENT TEST FAIL
 ```
+** Program will only check for components in the system PATH for qemu and libvirt. Components built from source code will need to be added to the PATH in order to be tested. **
 
 ## Stop at failure
 This flag causes the component test to stop running at the very first failure it reaches. This facilitates the visualization of individual failures, and allows the user to approach the checks individually if several of them are failing. 
@@ -177,15 +178,19 @@ $ python ./sev_component_test/sev_component_test.py -pl "qemu-system-x86_64 -ena
 This feature can't be used if the nonVerbose flag is also raised.
 
 ## Automatic Virtual Machine test
-This utility tests the system's ability to launch SEV VMs. Using a qcow2 image created using [linux-kit](https://github.com/linuxkit/linuxkit), the tool will attempt to launch an SEV VM. If the VM launches, it will then test the VMs memory for encryption. If the VM is succesfully launched and the memory appears to be encrypted, then the auto VM test will pass.
+This utility tests the system's ability to launch SEV VMs. Using a qcow2 image created using [linux-kit](https://github.com/linuxkit/linuxkit), the tool will attempt to automatically launch a VM. The user can specify if they want to launch an SEV VM or an unencrypted VM for testing. This is meant to work as a sanity check to make sure the system is working as expected after all of the SEV component tests have passed. If the user decides to launch the VM with SEV, then the memory will be checked for encryption, if the memory seems to be encrypted then the test will pass. If the user decides to launch the vm without encryption, then the test will make sure that the memory is unencrypted, thus making sure the SEV test is not a false positive. The qcow2 image is not intented to be used as a full VM since it has very limited funcitonality. The test will not run unless the SEV part of the component test passes.
+
 To launch this test use the command:
 ```
-$ python ./sev_component_test/sev_component_test.py --autotest
+$ python ./sev_component_test/sev_component_test.py --autotest [sev | unencrypted]
 ```
 or
 ```
 $ python ./sev_component_test/sev_component_test.py -at
 ```
+
+If the entry is left blank, then the tool will perform the sev test as a default.
+
 Example of result:
 ```
 Running automatic test for VM encryption:
