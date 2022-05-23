@@ -27,7 +27,7 @@ Packages needed:
 
 In order to install all the required python packages, there is a requirements.txt file provided. To install the desired packages simply run:
 ```
-$ pip/pip3 -r install requirements.txt
+$ pip/pip3 install -r requirements.txt
 ```
 on the root directory of the project.
 ## Ubuntu

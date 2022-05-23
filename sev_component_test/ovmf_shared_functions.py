@@ -164,7 +164,7 @@ def get_built_ovmf_paths():
     paths = []
     try:
         # Command to find all paths containing FV from root
-        subprocess_paths = subprocess.run("find / -type d -name FV",
+        subprocess_paths = subprocess.run("find / -xdev -type d -name FV",
                                           shell=True, check=True, capture_output=True)
         all_fv_paths = subprocess_paths.stdout.decode("utf-8").split('\n')
         all_fv_paths.remove('')
