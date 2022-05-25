@@ -644,7 +644,7 @@ def find_qemu_support(system_os:string, feature:string):
         return component, command, found_result, expectation, test_result
     except (subprocess.CalledProcessError) as err:
         if err.stderr.decode("utf-8").strip():
-            ovmf_shared_functions.print_warning_message("Getting linux distribution error: ",
+            ovmf_shared_functions.print_warning_message("Getting QEMU version error: ",
                                   err.stderr.decode("utf-8").strip())
         return component, command, found_result, expectation, test_result
 
