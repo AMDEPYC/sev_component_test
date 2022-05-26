@@ -208,6 +208,9 @@ def run_sev_es_test(non_verbose, system_os, stop_failure):
     # if not nonVerbose:
     print("\nComparing Host OS componenets to known SEV-ES minimum versions:")
 
+    # Will turn false if any check fails
+    pass_check = True
+
     running_tests = {
         component_tests.check_kernel: ['SEV-ES'],
         component_tests.find_os_support: ['SEV-ES'],
@@ -238,6 +241,64 @@ def run_sev_es_test(non_verbose, system_os, stop_failure):
         elif not current_test_result and stop_failure:
             pass_check = False
             break
+
+    return pass_check
+
+def run_sev_snp_test(non_verbose, system_os, stop_failure):
+    '''
+    Run the existing OS checks that query the system capabilites,
+    and informs if the current system setup can run SEV-ES.
+    '''
+    # if not nonVerbose:
+    print("\nComparing Host OS componenets to known SEV-SNP minimum versions:")
+
+    running_tests = {
+        component_tests.find_os_support : ['SEV-SNP'],
+        component_tests.check_reserved_rmp : [],
+        component_tests.check_sev_fw_veresion: []
+    }
+
+    snp_tests = {
+        component_tests.check_snp_init : [],
+        component_tests.check_rmp_init : [],
+        component_tests.compare_tcb_versions : []
+    }
+
+
+    
+    # Will turn false if any check fails
+    pass_check = True
+
+    for test, components in running_tests.items():
+        current_component, current_command, current_found_result,\
+            current_expectation, current_test_result = test(*components)
+        if not non_verbose:
+            print_test_result(current_component, current_command,
+                                current_found_result, current_expectation, current_test_result)
+
+        # Stop running checks immediately if the test fails and the stopfailure flag is enabled.
+        if not current_test_result and not stop_failure:
+            pass_check = False
+        # Test failed, stop failure enabled.
+        elif not current_test_result and stop_failure:
+            pass_check = False
+            break
+    
+    if pass_check:
+         for test, components in snp_tests.items():
+            current_component, current_command, current_found_result,\
+            current_expectation, current_test_result = test(*components)
+            if not non_verbose:
+                print_test_result(current_component, current_command,
+                                    current_found_result, current_expectation, current_test_result)
+
+            # Stop running checks immediately if the test fails and the stopfailure flag is enabled.
+            if not current_test_result and not stop_failure:
+                pass_check = False
+            # Test failed, stop failure enabled.
+            elif not current_test_result and stop_failure:
+                pass_check = False
+                break
 
     return pass_check
 
@@ -277,6 +338,13 @@ def run_component_tests(non_verbose, system_os, stop_failure, feature_tests):
         results['SEV-ES COMPONENT TEST'] = False
     else:
         results['SEV-ES COMPONENT TEST'] = True
+
+    # SEV-SNP enabled
+    if set(['sev-snp']).intersection(set(feature_tests)):
+        tests[run_sev_snp_test] = [non_verbose, system_os, stop_failure,'SEV-SNP COMPONENT TEST']
+        results['SEV-SNP COMPONENT TEST'] = False
+    else:
+        results['SEV-SNP COMPONENT TEST'] = True
 
     for test, test_description in tests.items():
         test_args = test_description[:-1]

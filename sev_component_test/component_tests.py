@@ -7,6 +7,7 @@ import re
 import os
 from packaging import version
 import ovmf_shared_functions
+import sev_apis
 
 def hex_to_binary(hex_num: str) -> bin:
     '''
@@ -200,7 +201,8 @@ def get_sev_string_and_asids(dmesg_string:string):
         # Support string completed
         elif (
             sev_support in ('SVM: SEV supported',
-                            'SEV supported', 'SEV-ES supported')
+                            'SEV supported', 'SEV-ES supported',
+                            'SEV-ES and SEV-SNP supported')
             and not support_found
         ):
             support_found = True
@@ -362,6 +364,9 @@ def find_os_support(feature:string):
     elif feature == "SEV-ES":
         expectation = "SEV-ES supported"
         grep_command = "grep SEV-ES"
+    elif feature == "SEV-SNP":
+        expectation = "SEV-SNP supported"
+        grep_command = "grep -w 'SEV-SNP supported'"
     else:
         ovmf_shared_functions.print_warning_message(component, "invalid feature")
         return component, 'NONE', found_result, 'NONE', test_result
@@ -384,7 +389,7 @@ def find_os_support(feature:string):
             # Call to get formatted SME support
             found_result = get_sme_string(test_string)
             test_result = True
-        elif test_string and feature in ('SEV', 'SEV-ES'):
+        elif test_string and feature in ('SEV', 'SEV-ES','SEV-SNP'):
             # Call to get formatted SEV support string
             found_result, _, _ = get_sev_string_and_asids(test_string)
             test_result = True
@@ -644,7 +649,7 @@ def find_qemu_support(system_os:string, feature:string):
         return component, command, found_result, expectation, test_result
     except (subprocess.CalledProcessError) as err:
         if err.stderr.decode("utf-8").strip():
-            ovmf_shared_functions.print_warning_message("Getting linux distribution error: ",
+            ovmf_shared_functions.print_warning_message("Getting QEMU version: ",
                                   err.stderr.decode("utf-8").strip())
         return component, command, found_result, expectation, test_result
 
@@ -715,3 +720,178 @@ def test_all_ovmf_paths(system_os:string, min_commit_date):
             paths_found.append(path_components)
 
     return one_path_true, paths_found
+
+def get_rmp_address(dmesg_string):
+    '''
+    Function to find the reserved rmp table addresses from the string presented in the kernel message.
+    '''
+    # CCP
+    ccp = ''
+    # RMP table notice
+    rmp_message = ''
+    # Addresses found
+    rmp_address = ''
+
+    out_of_ccp = False
+    in_rmp_address = False
+
+    for char in dmesg_string:
+        if not char.isalpha() and not out_of_ccp:
+            ccp += char
+        # Out of the ccp, collect RMP string
+        elif char.isalpha() and not out_of_ccp:
+            out_of_ccp = True
+            rmp_message += char
+        # Continue to collect RMP messge
+        elif out_of_ccp and not in_rmp_address and not char.isdigit():
+            rmp_message += char
+        # Collected the message, now collet the adress if there is any.
+        elif out_of_ccp and char.isdigit() and not in_rmp_address:
+            in_rmp_address = True
+            rmp_address += char
+        elif in_rmp_address:
+            rmp_address += char
+
+    # Formatted string returned
+    return rmp_message, rmp_address
+    
+
+def check_reserved_rmp():
+    '''
+    Find if the reserved rmp tables in the system by checking the kernel message.
+    '''
+    # Turns true if test passes
+    test_result = False
+    # Name of component being tested
+    component = "Reserved RMP table adress"
+    # Expected test result
+    expectation = "SEV-SNP: RMP table physical address"
+    # Will change to what the test finds
+    found_result = "EMPTY"
+    # Command being used
+    command = "dmesg | grep RMP"
+
+    try:
+        # Get dmesg
+        dmesg_read = subprocess.run(
+            "dmesg", shell=True, check=True, capture_output=True)
+        # grep from rmp
+        grep_read = subprocess.run("grep RMP", shell=True,
+                                  input=dmesg_read.stdout, check=True, capture_output=True)
+        # Grab message and adress
+        rmp_message, rmp_address = get_rmp_address(grep_read.stdout.decode('utf-8'))
+        # Success message
+        if rmp_message.strip() == "SEV-SNP: RMP table physical address":
+            found_result = rmp_message.strip() + " " + rmp_address.strip()
+            test_result = True
+        # Message not correct test fails.
+        else:
+            found_result = rmp_message
+        return component, command, found_result, expectation, test_result
+    except (subprocess.CalledProcessError) as err:
+        if err.stderr.decode("utf-8").strip():
+            ovmf_shared_functions.print_warning_message("Getting RMP adresses from kernel messge: ",
+                                  err.stderr.decode("utf-8").strip())
+        return component, command, found_result, expectation, test_result
+
+def check_sev_fw_veresion():
+    '''
+    Use SEV_PLATFORM_STATUS to find the current fw version in the system.
+    If FW version is not newest test fails, SNP would not be usable.
+    '''
+    # Turns true if test passes
+    test_result = False
+    # Name of component being tested
+    component = "System SEV firmware version"
+    # Expected test result
+    expectation = "SEV-SNP API VERSION 1.51"
+    # Will change to what the test finds
+    found_result = ""
+    # Command being used
+    command = "SEV_PLATFORM_STATUS"
+
+    sev_plat_status = sev_apis.run_sev_platform_status()
+
+    found_result = str(sev_plat_status.api_major) + "." + str(sev_plat_status.api_minor)
+
+    if found_result == "1.51":
+        test_result = True
+    
+    return component, command, found_result, expectation, test_result
+
+def check_snp_init():
+    '''
+    Check the SNP_PLATFORM_STATUS to see if SNP is init.
+    '''
+    # Turns true if test passes
+    test_result = False
+    # Name of component being tested
+    component = "SNP INIT"
+    # Expected test result
+    expectation = "1"
+    # Will change to what the test finds
+    found_result = ""
+    # Command being used
+    command = "SNP_PLATFORM_STATUS"
+
+    snp_plat_status = sev_apis.run_snp_platform_status()
+
+    found_result = str(snp_plat_status.state)
+
+    if found_result == expectation:
+        test_result = True
+
+    return component, command, found_result, expectation, test_result
+
+def check_rmp_init():
+    '''
+    Check the SNP_PLATFORM_STATUS to see if RMP is init.
+    '''
+    # Turns true if test passes
+    test_result = False
+    # Name of component being tested
+    component = "RMP INIT"
+    # Expected test result
+    expectation = "1"
+    # Will change to what the test finds
+    found_result = ""
+    # Command being used
+    command = "SNP_PLATFORM_STATUS"
+
+    snp_plat_status = sev_apis.run_snp_platform_status()
+
+    found_result = str(snp_plat_status.is_rmp_init)
+
+    if found_result == expectation:
+        test_result = True
+
+    return component, command, found_result, expectation, test_result
+
+def compare_tcb_versions():
+    '''
+    Make sure that the reported TCB and the current TCB versions match up.
+    '''
+    # Turns true if test passes
+    test_result = False
+    # Name of component being tested
+    component = "Comparing TCB versions"
+    # Expected test result
+    expectation = "Current TCB matches reported TCB"
+    # Will change to what the test finds
+    found_result = ""
+    # Command being used
+    command = "SNP_PLATFORM_STATUS"
+
+    snp_plat_status = sev_apis.run_snp_platform_status()
+
+    reported_tcb = str(snp_plat_status.reported_tcb)
+    current_tcb = str(snp_plat_status.tcb_version)
+
+    if reported_tcb == current_tcb:
+        test_result = True
+
+    found_result = "Current TCB: " + current_tcb + " Reported TCB: " + reported_tcb
+
+    return component, command, found_result, expectation, test_result
+    
+
