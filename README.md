@@ -181,7 +181,7 @@ This feature can't be used if the nonVerbose flag is also raised.
 This utility tests the system's ability to launch SEV VMs. Using a qcow2 image created using [linux-kit](https://github.com/linuxkit/linuxkit), the tool will attempt to automatically launch a VM. The user can specify if they want to launch an SEV VM or an unencrypted VM for testing. This is meant to work as a sanity check to make sure the system is working as expected after all of the SEV component tests have passed. If the user decides to launch the VM with SEV, then the memory will be checked for encryption, if the memory seems to be encrypted then the test will pass. If the user decides to launch the VM without encryption, then the test will make sure that the memory is unencrypted, thus making sure the SEV test is not a false positive. The qcow2 image is not intented to be used as a full VM since it has very limited funcitonality. The test will not run unless the SEV part of the component test passes.
 
 ### Set-up
-Due to the large size of the qcow2 image, the image is being stored in the repository through git large file sotrage. In order to be able to use this feature one has to pull down the repo using git lfs. To do this, one first has to install the git-lfs exetension.
+Due to the large size of the qcow2 image, the image is being stored in the repository through git large file storage. In order to be able to use this feature, one has to pull down the repo using git lfs. To do this, one first has to install the git-lfs extension.
 
 Ubuntu:
 ```
