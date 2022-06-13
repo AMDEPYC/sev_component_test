@@ -1,0 +1,4 @@
+[tool.pytest.ini_options]
+pythonpath = [
+  ".", "sev_component_test"
+]
