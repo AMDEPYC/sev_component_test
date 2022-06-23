@@ -420,9 +420,14 @@ def get_linux_distro():
         # Format in to grap the distro version number
         linux_version = distro_version_read.stdout.decode(
             'UTF-8').strip().replace("\"", "")
-        # Format to get the distro name
-        linux_os = distro_name_read.stdout.decode(
-            'UTF-8').split('\n')[0].replace("\"", "")
+       # Format to get the distro name
+        id_read = distro_name_read.stdout.decode(
+            'UTF-8').split('\n')
+        for read in id_read:
+            read = read.replace("\"", "")
+            if not True in [char.isdigit() for char in read]:
+                linux_os = read
+                break
 
         return linux_os, linux_version
     except (subprocess.CalledProcessError) as err:
