@@ -15,7 +15,7 @@ def hex_to_binary(hex_num: str) -> bin:
     return bin(int(hex_num, 16))[2:]
 
 
-def check_eax(read_out: list, feature: string) -> int:
+def check_eax(read_out: list, feature: str) -> int:
     '''
     Get CPUID read and then parse the input to get either the bit 1 or bit 0 from the eax register,
     depending on the future that is being checked (SME or SEV).
@@ -35,7 +35,7 @@ def check_eax(read_out: list, feature: string) -> int:
     return None
 
 
-def find_cpuid_support(distro: string, feature: string):
+def find_cpuid_support(distro: str, feature: str):
     '''
     Check the CPUID function 0x8000001f and look at the eax register in order to tell
     whether or not the current CPU supports SEV/SME.
@@ -84,6 +84,7 @@ def find_cpuid_support(distro: string, feature: string):
         if err.stderr.decode("utf-8").strip():
             ovmf_shared_functions.print_warning_message(
                 component, err.stderr.decode("utf-8").strip())
+        else: ovmf_shared_functions.print_warning_message(component, "Could not read cpuid for eax")
         return component, command, found_result, expectation, test_result
 
 
