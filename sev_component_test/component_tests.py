@@ -228,7 +228,7 @@ def get_sev_string_and_asids(dmesg_string:string):
     return sev_support, available_asids, asid_num
 
 
-def get_version_num(line:string) -> string:
+def get_version_num(line:str) -> str:
     '''
     Get version number for given feature (Kernel, libvirt, qemu,ASIDs).
     Get versions in MAJOR.MINOR.PATHC format. Will populate patch with 0 if not available.
@@ -426,8 +426,13 @@ def get_linux_distro():
         linux_version = distro_version_read.stdout.decode(
             'UTF-8').strip().replace("\"", "")
         # Format to get the distro name
-        linux_os = distro_name_read.stdout.decode(
-            'UTF-8').split('\n')[0].replace("\"", "")
+        id_read = distro_name_read.stdout.decode(
+            'UTF-8').split('\n')
+        for read in id_read:
+            read = read.replace("\"", "")
+            if not True in [char.isdigit() for char in read]:
+                linux_os = read
+                break
 
         return linux_os, linux_version
     except (subprocess.CalledProcessError) as err:
@@ -482,7 +487,7 @@ def check_linux_distribution():
     return component, command, found_result, expectation, test_result
 
 
-def check_kernel(feature:string):
+def check_kernel(feature:str):
     '''
     Find current kernel version in system,
     then compare it against known minimums to see if system can run either SEV or SEV-ES.
@@ -521,8 +526,7 @@ def check_kernel(feature:string):
 
     return component, command, found_result, expectation, test_result
 
-
-def find_sev_libvirt_enablement():
+def find_sev_libvirt_enablement(system_os:str):
     '''
     Find if SEV is enabled using LibVirt domcapabilities.
     A good way to confirm that SEV is enabled on the host OS.
@@ -552,8 +556,19 @@ def find_sev_libvirt_enablement():
         return component, command, found_result, expectation, test_result
     except (subprocess.CalledProcessError) as err:
         if err.stderr.decode("utf-8").strip():
-            ovmf_shared_functions.print_warning_message(component,
+            # Erorr raised by snp qemu was found
+            if err.stderr.decode("utf-8").split('\n')[1].strip() == "error: Unable to read from monitor: Connection reset by peer":
+                # Find if snp qemu is the one installed in the system.
+                # If snp qemu is the one installed, then ignore libvirt test due to compability issues.
+                if is_this_snp_QEMU(system_os):
+                    ovmf_shared_functions.print_warning_message(component, "system is running SNP QEMU, which is not compatible with libvirt, test ignored.")
+                    test_result = True
+                    found_result = "test ignored"
+            else:        
+                ovmf_shared_functions.print_warning_message(component,
                                   err.stderr.decode("utf-8").strip())
+        else:
+            ovmf_shared_functions.print_warning_message(component, "could not grab systems's libvirt domcapabilities.")
         return component, command, found_result, expectation, test_result
 
 
@@ -652,6 +667,48 @@ def find_qemu_support(system_os:string, feature:string):
             ovmf_shared_functions.print_warning_message("Getting QEMU version: ",
                                   err.stderr.decode("utf-8").strip())
         return component, command, found_result, expectation, test_result
+
+def is_this_snp_QEMU(system_os):
+    '''
+    This function will be called if a specific error happens when trying to find the system's domcapabilities using libvirt.
+    It will look for an external snp qemu and the current default qemu installed in the system.
+    If the versions match then the program will assume you are running the snp qemu as the default.
+    '''
+    # Grab the system installed qemu
+    _, _, system_installed_qemu, _, _ = find_qemu_support(system_os, 'SEV')
+    installed_qemu_version = get_version_num(system_installed_qemu)
+    # Find the current version of the snp qemu
+    try:
+        #Find snp-build path
+        snp_release_path_raw = subprocess.run("find / -name 'snp-release*'", shell=True, check=True, capture_output=True)
+        snp_release_paths = snp_release_path_raw.stdout.decode("utf-8").split('\n')
+        for path in snp_release_paths:
+            if path and path.strip()[-2:] != "gz":
+                snp_release_path = path
+                break
+        # No SNP build found
+        if not snp_release_path:
+            ovmf_shared_functions.print_warning_message("Checking SNP QEMU version", "No SNP QEMU found, double check installation.")
+        # Path to snp qemu
+        snp_qemu_path = snp_release_path + "/usr/local/bin/qemu-system-x86_64"
+        # Get snp qemu version
+        snp_qemu_version_raw = subprocess.run(snp_qemu_path + " --version", shell=True, check=True, capture_output=True)
+        snp_qemu_version = get_version_num(snp_qemu_version_raw.stdout.decode("utf-8").split('\n')[0])
+        #Check if versions match
+        if snp_qemu_version == installed_qemu_version:
+            return True
+        else:
+            return False
+    # Error was raised by subprocess
+    except (subprocess.CalledProcessError) as err:
+        if err.stderr.decode("utf-8").strip():
+            ovmf_shared_functions.print_warning_message("Getting SNP QEMU version: ",
+                                  err.stderr.decode("utf-8").strip())
+        else:
+            ovmf_shared_functions.print_warning_message("Getting SNP QEMU version: ",
+                                  "Could not get SNP QEMU version.")
+
+
 
 
 def test_all_ovmf_paths(system_os:string, min_commit_date):

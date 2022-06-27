@@ -169,7 +169,7 @@ def run_sev_test(non_verbose, system_os, stop_failure):
         component_tests.find_os_support: ['SEV'],
         component_tests.find_asid_count: ['SEV'],
         component_tests.find_libvirt_support: [],
-        component_tests.find_sev_libvirt_enablement: [],
+        component_tests.find_sev_libvirt_enablement: [system_os],
         component_tests.find_qemu_support: [system_os, 'SEV'],
         component_tests.test_all_ovmf_paths: [
             system_os, datetime.date(2018, 7, 6)]
