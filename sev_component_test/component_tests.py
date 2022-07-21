@@ -526,6 +526,29 @@ def check_kernel(feature:str):
 
     return component, command, found_result, expectation, test_result
 
+def check_if_sev_init():
+    # Turns true if test passes
+    test_result = False
+    # Name of component being tested
+    component = "SEV INIT STATE"
+    # Will change to what the test finds
+    found_result = "EMPTY"
+    # Command being used
+    command = "SEV apis"
+    #Expected result
+    expectation = "1"
+
+    sev_plat_status = sev_apis.run_sev_platform_status()
+
+    sev_init_status = sev_plat_status.state
+
+    found_result = str(sev_init_status)
+
+    if sev_init_status:
+        test_result = True
+
+    return component, command, found_result, expectation, test_result 
+
 def find_sev_libvirt_enablement(system_os:str):
     '''
     Find if SEV is enabled using LibVirt domcapabilities.
@@ -609,6 +632,9 @@ def find_libvirt_support():
         if err.stderr.decode("utf-8").strip():
             ovmf_shared_functions.print_warning_message(component,
                                   err.stderr.decode("utf-8").strip())
+        else:
+            ovmf_shared_functions.print_warning_message(component,
+                                  "Grabbing libvirt version failed.")
         return component, command, found_result, expectation, test_result
 
 
@@ -941,8 +967,9 @@ def compare_tcb_versions():
 
     snp_plat_status = sev_apis.run_snp_platform_status()
 
-    reported_tcb = str(snp_plat_status.reported_tcb)
     current_tcb = str(snp_plat_status.tcb_version)
+    reported_tcb = str(snp_plat_status.reported_tcb)
+    
 
     if reported_tcb == current_tcb:
         test_result = True

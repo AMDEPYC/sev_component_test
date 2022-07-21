@@ -168,6 +168,7 @@ def run_sev_test(non_verbose, system_os, stop_failure):
         component_tests.check_kernel: ['SEV'],
         component_tests.find_os_support: ['SEV'],
         component_tests.find_asid_count: ['SEV'],
+        component_tests.check_if_sev_init: [],
         component_tests.find_libvirt_support: [],
         component_tests.find_sev_libvirt_enablement: [system_os],
         component_tests.find_qemu_support: [system_os, 'SEV'],
