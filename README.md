@@ -57,7 +57,7 @@ $ python ./sev_component_test/sev_component_test.py
 ```
 This will initialize the check on the system and the results of the component test will appear on the terminal screen.
 
-** PYTHON 3.8 OR NEWER IS REQUIRED TO RUN THE PROGRAM**
+**PYTHON 3.8 OR NEWER IS REQUIRED TO RUN THE PROGRAM**
 
 There are flags that can be raised in order to use different features that the tool offers. These can be raised individually or a combination of them at the same time.
 
