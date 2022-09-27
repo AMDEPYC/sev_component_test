@@ -208,6 +208,9 @@ def run_sev_es_test(non_verbose, system_os, stop_failure):
     # if not nonVerbose:
     print("\nComparing Host OS componenets to known SEV-ES minimum versions:")
 
+    # Will turn false if any check fails
+    pass_check = True
+
     running_tests = {
         component_tests.check_kernel: ['SEV-ES'],
         component_tests.find_os_support: ['SEV-ES'],
