@@ -612,7 +612,7 @@ def find_qemu_support(system_os:string, feature:string):
     # List of knonw working commands to get the QEMU version in the system depending on the distro
     qemu_command_list = {
         'ubuntu': 'qemu-system-x86_64 --version', 'debian': 'qemu-system-x86_64 --version',
-        'fedora': '/usr/libexec/qemu-kvm --version', 'rhel': '/usr/libexec/qemu-kvm --version',
+        'fedora': 'qemu-system-x86_64 --version', 'rhel': '/usr/libexec/qemu-kvm --version',
         'opensuse-tumbleweed': 'qemu-system-x86_64 --version',
         'opensuse-leap': 'qemu-system-x86_64 --version',
         'centos': '/usr/libexec/qemu-kvm --version', 'oracle': '/usr/libexec/qemu-kvm --version'
