@@ -408,7 +408,7 @@ def get_linux_distro():
         cat_read = subprocess.run("cat /etc/os-release", shell=True,
                                   check=True, capture_output=True)
         # grep to get the desired fields
-        grep_read_version = subprocess.run("grep -w 'VERSION_ID='", shell=True,
+        grep_read_version = subprocess.run("grep -w 'VERSION_ID'", shell=True,
                                            input=cat_read.stdout, check=True, capture_output=True)
         grep_read_name = subprocess.run("grep ID=", shell=True,
                                         input=cat_read.stdout, check=True, capture_output=True)
@@ -465,9 +465,8 @@ def check_linux_distribution():
     # Get system distribution and version
     distro_name, distro_version = get_linux_distro()
 
-    found_result = distro_name + ' ' + distro_version
     # If distribution in list, then compare system version against minimum version
-    if distro_name:
+    if distro_name and distro_version:
         found_result = distro_name + ' ' + distro_version
         if distro_name in min_distro_versions:
             min_version = min_distro_versions[distro_name]
