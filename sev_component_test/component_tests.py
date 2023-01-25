@@ -201,7 +201,8 @@ def get_sev_string_and_asids(dmesg_string:string):
         # Support string completed
         elif (
             sev_support in ('SVM: SEV supported',
-                            'SEV supported', 'SEV-ES supported')
+                            'SEV supported', 'SEV-ES supported',
+                            'SEV-ES and SEV-SNP supported')
             and not support_found
         ):
             support_found = True
