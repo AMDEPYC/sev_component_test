@@ -726,6 +726,8 @@ def check_bios_enablement():
     '''
     Find in SEV/SME encryption is enabled in bios by looking at dmesg for notice.
     Will only appear on 1.51 fw or newer. If message doesn't appear then test passes.
+    Test will only appear in results if test fails, since the test could pass if dmesg is emptied
+    or if an old fw is installed.
     '''
     # Turns true if test passes
     test_result = False
@@ -734,9 +736,9 @@ def check_bios_enablement():
     # Expected test result
     expectation = "No notice (SEV enabled in BIOS)"
     # Will change to what the test finds
-    found_result = "EMPTY"
+    found_result = None
     # Command being used
-    command = "grep -w 'memory encryption'"
+    command = "grep -w 'memory encryption not enabled by BIOS'"
     try:
         # Read using dmesg
         dmesg_read = subprocess.run(
