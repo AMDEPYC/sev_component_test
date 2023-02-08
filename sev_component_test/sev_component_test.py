@@ -90,7 +90,8 @@ def check_system_support_test(sme_enabled, non_verbose, system_os, stop_failure)
     # Tests to be run
     running_tests = {
         component_tests.find_cpuid_support: (system_os, 'SEV'),
-        component_tests.check_virtualization: ()
+        component_tests.check_virtualization: (),
+        component_tests.check_bios_enablement: ()
     }
 
     if sme_enabled:
@@ -109,6 +110,10 @@ def check_system_support_test(sme_enabled, non_verbose, system_os, stop_failure)
     for test, components in running_tests.items():
         current_component, current_command, current_found_result,\
             current_expectation, current_test_result = test(*components)
+        # BIOS enablement test passes. No need to provide message if test passes. 
+        # If test fails, provide error message.
+        if test == component_tests.check_bios_enablement and current_test_result:
+            continue
         if not non_verbose:
             print_test_result(current_component, current_command,
                               current_found_result, current_expectation, current_test_result)

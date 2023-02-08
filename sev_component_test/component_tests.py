@@ -721,3 +721,48 @@ def test_all_ovmf_paths(system_os:string, min_commit_date):
             paths_found.append(path_components)
 
     return one_path_true, paths_found
+
+def check_bios_enablement():
+    '''
+    Find in SEV/SME encryption is enabled in bios by looking at dmesg for notice.
+    Will only appear on 1.51 fw or newer. If message doesn't appear then test passes.
+    Test will only appear in results if test fails, since the test could pass if dmesg is emptied
+    or if an old fw is installed.
+    '''
+    # Turns true if test passes
+    test_result = False
+    # Name of component being tested
+    component = "BIOS enablement"
+    # Expected test result
+    expectation = "No notice (SEV enabled in BIOS)"
+    # Will change to what the test finds
+    found_result = None
+    # Command being used
+    command = "grep -w 'memory encryption not enabled by BIOS'"
+    try:
+        # Read using dmesg
+        dmesg_read = subprocess.run(
+            "dmesg", shell=True, check=True, capture_output=True)
+        # Grep for error message
+        test_string_raw = subprocess.run(command, shell=True,
+                                         input=dmesg_read.stdout, check=True, capture_output=True)
+        # Grab the test string
+        test_string = test_string_raw.stdout.decode('utf-8').strip()
+        # If the test string appears, assume SME is disabled in BIOS
+        if test_string:
+            # Grab error message and return test result
+            division_string = test_string.split(":")
+            found_result = ':'.join(division_string[-2:]).strip()
+        return component, command, found_result, expectation, test_result
+    except (subprocess.CalledProcessError) as err:
+        # Error in subprocess, print warning message
+        if err.stderr.decode("utf-8").strip():
+            ovmf_shared_functions.print_warning_message(
+                component, err.stderr.decode("utf-8").strip())
+        # BIOS message not found, SEV probably enabled in BIOS. This means the test passes,
+        # Or the dmesg message is unavailable on current fw.
+        elif err.returncode == 1 and not err.stderr.decode("utf-8").strip():
+            found_result = ''
+            test_result = True
+        # Return results
+        return component, command, found_result, expectation, test_result
