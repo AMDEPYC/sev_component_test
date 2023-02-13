@@ -16,7 +16,7 @@ def hex_to_binary(hex_num: str) -> bin:
     return bin(int(hex_num, 16))[2:]
 
 
-def check_eax(read_out: list, feature: string) -> int:
+def check_eax(read_out: list, feature: str) -> int:
     '''
     Get CPUID read and then parse the input to get either the bit 1 or bit 0 from the eax register,
     depending on the future that is being checked (SME or SEV).
@@ -36,7 +36,7 @@ def check_eax(read_out: list, feature: string) -> int:
     return None
 
 
-def find_cpuid_support(distro: string, feature: string):
+def find_cpuid_support(distro: str, feature: str):
     '''
     Check the CPUID function 0x8000001f and look at the eax register in order to tell
     whether or not the current CPU supports SEV/SME.
@@ -85,6 +85,7 @@ def find_cpuid_support(distro: string, feature: string):
         if err.stderr.decode("utf-8").strip():
             ovmf_shared_functions.print_warning_message(
                 component, err.stderr.decode("utf-8").strip())
+        else: ovmf_shared_functions.print_warning_message(component, "Could not read cpuid for eax")
         return component, command, found_result, expectation, test_result
 
 
@@ -412,7 +413,7 @@ def get_linux_distro():
         cat_read = subprocess.run("cat /etc/os-release", shell=True,
                                   check=True, capture_output=True)
         # grep to get the desired fields
-        grep_read_version = subprocess.run("grep -w 'VERSION_ID='", shell=True,
+        grep_read_version = subprocess.run("grep -w 'VERSION_ID'", shell=True,
                                            input=cat_read.stdout, check=True, capture_output=True)
         grep_read_name = subprocess.run("grep ID=", shell=True,
                                         input=cat_read.stdout, check=True, capture_output=True)
@@ -425,7 +426,7 @@ def get_linux_distro():
         # Format in to grap the distro version number
         linux_version = distro_version_read.stdout.decode(
             'UTF-8').strip().replace("\"", "")
-        # Format to get the distro name
+       # Format to get the distro name
         id_read = distro_name_read.stdout.decode(
             'UTF-8').split('\n')
         for read in id_read:
@@ -469,9 +470,8 @@ def check_linux_distribution():
     # Get system distribution and version
     distro_name, distro_version = get_linux_distro()
 
-    found_result = distro_name + ' ' + distro_version
     # If distribution in list, then compare system version against minimum version
-    if distro_name:
+    if distro_name and distro_version:
         found_result = distro_name + ' ' + distro_version
         if distro_name in min_distro_versions:
             min_version = min_distro_versions[distro_name]
@@ -653,7 +653,7 @@ def find_qemu_support(system_os:string, feature:string):
     # List of knonw working commands to get the QEMU version in the system depending on the distro
     qemu_command_list = {
         'ubuntu': 'qemu-system-x86_64 --version', 'debian': 'qemu-system-x86_64 --version',
-        'fedora': '/usr/libexec/qemu-kvm --version', 'rhel': '/usr/libexec/qemu-kvm --version',
+        'fedora': 'qemu-system-x86_64 --version', 'rhel': '/usr/libexec/qemu-kvm --version',
         'opensuse-tumbleweed': 'qemu-system-x86_64 --version',
         'opensuse-leap': 'qemu-system-x86_64 --version',
         'centos': '/usr/libexec/qemu-kvm --version', 'oracle': '/usr/libexec/qemu-kvm --version'
@@ -690,7 +690,7 @@ def find_qemu_support(system_os:string, feature:string):
         return component, command, found_result, expectation, test_result
     except (subprocess.CalledProcessError) as err:
         if err.stderr.decode("utf-8").strip():
-            ovmf_shared_functions.print_warning_message("Getting QEMU version: ",
+            ovmf_shared_functions.print_warning_message("Getting QEMU version error: ",
                                   err.stderr.decode("utf-8").strip())
         return component, command, found_result, expectation, test_result
 
@@ -979,3 +979,48 @@ def compare_tcb_versions():
     return component, command, found_result, expectation, test_result
     
 
+
+def check_bios_enablement():
+    '''
+    Find in SEV/SME encryption is enabled in bios by looking at dmesg for notice.
+    Will only appear on 1.51 fw or newer. If message doesn't appear then test passes.
+    Test will only appear in results if test fails, since the test could pass if dmesg is emptied
+    or if an old fw is installed.
+    '''
+    # Turns true if test passes
+    test_result = False
+    # Name of component being tested
+    component = "BIOS enablement"
+    # Expected test result
+    expectation = "No notice (SEV enabled in BIOS)"
+    # Will change to what the test finds
+    found_result = None
+    # Command being used
+    command = "grep -w 'memory encryption not enabled by BIOS'"
+    try:
+        # Read using dmesg
+        dmesg_read = subprocess.run(
+            "dmesg", shell=True, check=True, capture_output=True)
+        # Grep for error message
+        test_string_raw = subprocess.run(command, shell=True,
+                                         input=dmesg_read.stdout, check=True, capture_output=True)
+        # Grab the test string
+        test_string = test_string_raw.stdout.decode('utf-8').strip()
+        # If the test string appears, assume SME is disabled in BIOS
+        if test_string:
+            # Grab error message and return test result
+            division_string = test_string.split(":")
+            found_result = ':'.join(division_string[-2:]).strip()
+        return component, command, found_result, expectation, test_result
+    except (subprocess.CalledProcessError) as err:
+        # Error in subprocess, print warning message
+        if err.stderr.decode("utf-8").strip():
+            ovmf_shared_functions.print_warning_message(
+                component, err.stderr.decode("utf-8").strip())
+        # BIOS message not found, SEV probably enabled in BIOS. This means the test passes,
+        # Or the dmesg message is unavailable on current fw.
+        elif err.returncode == 1 and not err.stderr.decode("utf-8").strip():
+            found_result = ''
+            test_result = True
+        # Return results
+        return component, command, found_result, expectation, test_result

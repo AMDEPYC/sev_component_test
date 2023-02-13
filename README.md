@@ -27,7 +27,7 @@ Packages needed:
 
 In order to install all the required python packages, there is a requirements.txt file provided. To install the desired packages simply run:
 ```
-$ pip/pip3 -r install requirements.txt
+$ pip/pip3 install -r requirements.txt
 ```
 on the root directory of the project.
 ## Ubuntu
@@ -57,7 +57,7 @@ $ python ./sev_component_test/sev_component_test.py
 ```
 This will initialize the check on the system and the results of the component test will appear on the terminal screen.
 
-** PYTHON 3.6 OR NEWER IS REQUIRED TO RUN THE PROGRAM**
+**PYTHON 3.8 OR NEWER IS REQUIRED TO RUN THE PROGRAM**
 
 There are flags that can be raised in order to use different features that the tool offers. These can be raised individually or a combination of them at the same time.
 
@@ -180,6 +180,28 @@ This feature can't be used if the nonVerbose flag is also raised.
 ## Automatic Virtual Machine test
 This utility tests the system's ability to launch SEV VMs. Using a qcow2 image created using [linux-kit](https://github.com/linuxkit/linuxkit), the tool will attempt to automatically launch a VM. The user can specify if they want to launch an SEV VM or an unencrypted VM for testing. This is meant to work as a sanity check to make sure the system is working as expected after all of the SEV component tests have passed. If the user decides to launch the VM with SEV, then the memory will be checked for encryption, if the memory seems to be encrypted then the test will pass. If the user decides to launch the VM without encryption, then the test will make sure that the memory is unencrypted, thus making sure the SEV test is not a false positive. The qcow2 image is not intented to be used as a full VM since it has very limited funcitonality. The test will not run unless the SEV part of the component test passes.
 
+### Set-up
+Due to the large size of the qcow2 image, the image is being stored in the repository through git large file storage. In order to be able to use this feature, one has to pull down the repo using git lfs. To do this, one first has to install the git-lfs extension.
+
+Ubuntu:
+```
+$ sudo apt install git-lfs
+```
+RHEL:
+```
+$ sudo dnf install git-lfs.x86_64
+```
+OPEN-SUSE:
+```
+$ sudo zypper install git-lfs
+```
+
+Once git-lfs is installed, you can pull again in the same repository using:
+```
+$ git lfs pull
+```
+This will pull down the qcow2 image from the lfs repository and will be available for testing.
+### Run Test
 To launch this test use the command:
 ```
 $ python ./sev_component_test/sev_component_test.py --autotest [sev | unencrypted]
