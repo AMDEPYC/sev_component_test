@@ -27,56 +27,7 @@ def format_ebx_for_cbit(read_out: str):
     # Return the c-bit value
     c_bit = int(c_bit_binary,2)
     return c_bit
-import component_tests
 
-# def get_cbit():
-#     '''
-#     Function to grab system's cbit required to launch an sev machine.
-#     Need libvirt working in order to grab it.
-#     '''
-#     # Where cbit will be stored
-#     cbit = ''
-#     try:
-#         # Check domcapabilities
-#         libvirt_domcapabilities = subprocess.run(
-#             "virsh domcapabilities", shell=True, check=True, capture_output=True)
-#         # Grep for cbit
-#         grep_read = subprocess.run("grep cbit", shell=True,
-#                                    input=libvirt_domcapabilities.stdout, check=True, capture_output=True)
-#         # Grab cbit from returned string
-#         for char in grep_read.stdout.decode("utf-8").strip():
-#             if char.isdigit():
-#                 cbit += char
-#         # Return system cbit
-#         return cbit
-#     # Error when trying to find the cbit.
-#     except (subprocess.CalledProcessError) as err:
-#         if err.stderr:
-#             ovmf_shared_functions.print_warning_message('Grabbing cbit', \
-#                 err.stderr.decode("utf-8").strip())
-#         else:
-#             ovmf_shared_functions.print_warning_message('Grabbing cbit', 'Could not use virsh to find cbit')
-#         return cbit
-
-def format_ebx_for_cbit(read_out: str):
-    '''
-    Get CPUID read and then parse the input to get the system's required c-bit
-    to encrypt the memory for VM. Alternate way instead of using domcapabilities.
-    '''
-    # Getting the hex ebx value
-    hex_num = read_out[2:10]
-    # Converting it to binary and then flipping it in order to read it.
-    binary_value = component_tests.hex_to_binary(hex_num)
-    binary_value = binary_value[::-1]
-    # Grabbing the c-bit bits (0:5)
-    c_bit_binary_flipped = binary_value[0:6]
-    # Flipping again to have them in the right order
-    c_bit_binary = c_bit_binary_flipped[::-1]
-    # Return the c-bit value
-    c_bit = int(c_bit_binary,2)
-    return c_bit
-
-def grab_cbit_from_cpuid(distro:str) -> str:
 def grab_cbit_from_cpuid(distro:str) -> str:
     '''
     Using the CPUID 0x8000001f function and ebx register we can find the system's
@@ -97,17 +48,6 @@ def grab_cbit_from_cpuid(distro:str) -> str:
         command = "cpuid -r -1 -l 0x8000001f"
     
     try:
-        # Read CPUID
-        cpuid_read = subprocess.run(
-            command, shell=True,
-            check=True, capture_output=True)
-        # Format the return string
-        ebx_read_raw = subprocess.run(
-            "sed 's/.*ebx=//'", input=cpuid_read.stdout,
-            shell=True, check=True, capture_output=True)
-        ebx_read = ebx_read_raw.stdout.decode("utf-8").split('\n')
-        # Format read to get cbit
-        return format_ebx_for_cbit(ebx_read[1])
         # Read CPUID
         cpuid_read = subprocess.run(
             command, shell=True,

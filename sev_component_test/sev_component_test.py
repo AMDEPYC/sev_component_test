@@ -175,7 +175,6 @@ def run_sev_test(non_verbose, system_os, stop_failure):
         component_tests.find_asid_count: ['SEV'],
         component_tests.check_if_sev_init: [],
         component_tests.find_libvirt_support: [],
-        component_tests.find_sev_libvirt_enablement: [system_os],
         component_tests.find_qemu_support: [system_os, 'SEV'],
         component_tests.test_all_ovmf_paths: [
             system_os, datetime.date(2018, 7, 6)]
@@ -261,7 +260,7 @@ def run_sev_snp_test(non_verbose, system_os, stop_failure):
     running_tests = {
         component_tests.find_os_support : ['SEV-SNP'],
         component_tests.check_reserved_rmp : [],
-        component_tests.check_sev_fw_veresion: []
+        component_tests.check_sev_fw_veresion: [],
     }
 
     snp_tests = {

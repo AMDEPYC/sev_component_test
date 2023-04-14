@@ -5,9 +5,10 @@ import string
 import subprocess
 import re
 import os
+from warnings import warn
 from packaging import version
 import ovmf_shared_functions
-import sev_apis
+import ioctl
 
 def hex_to_binary(hex_num: str) -> bin:
     '''
@@ -203,7 +204,9 @@ def get_sev_string_and_asids(dmesg_string:string):
         elif (
             sev_support in ('SVM: SEV supported',
                             'SEV supported', 'SEV-ES supported',
-                            'SEV-ES and SEV-SNP supported')
+                            'SEV-ES and SEV-SNP supported', 
+                            'kvm_amd: SEV-ES and SEV-SNP supported',
+                            'kvm_amd: SEV supported')
             and not support_found
         ):
             support_found = True
@@ -538,7 +541,7 @@ def check_if_sev_init():
     #Expected result
     expectation = "1"
 
-    sev_plat_status = sev_apis.run_sev_platform_status()
+    sev_plat_status = ioctl.run_sev_platform_status()
 
     sev_init_status = sev_plat_status.state
 
@@ -555,6 +558,7 @@ def find_sev_libvirt_enablement(system_os:str):
     A good way to confirm that SEV is enabled on the host OS.
     This test will only run if LibVirt is found to be installed and it is also compatible with SEV.
     '''
+    warn("This test is now deprecated, look at check_if_sev_init()", DeprecationWarning)
     # Turns true if test passes
     test_result = False
     # Name of component being tested
@@ -826,10 +830,10 @@ def get_rmp_address(dmesg_string):
             out_of_ccp = True
             rmp_message += char
         # Continue to collect RMP messge
-        elif out_of_ccp and not in_rmp_address and not char.isdigit():
+        elif out_of_ccp and not in_rmp_address and char != "[":
             rmp_message += char
         # Collected the message, now collet the adress if there is any.
-        elif out_of_ccp and char.isdigit() and not in_rmp_address:
+        elif out_of_ccp and char == "[" and not in_rmp_address:
             in_rmp_address = True
             rmp_address += char
         elif in_rmp_address:
@@ -893,7 +897,7 @@ def check_sev_fw_veresion():
     # Command being used
     command = "SEV_PLATFORM_STATUS"
 
-    sev_plat_status = sev_apis.run_sev_platform_status()
+    sev_plat_status = ioctl.run_sev_platform_status()
 
     found_result = str(sev_plat_status.api_major) + "." + str(sev_plat_status.api_minor)
 
@@ -917,7 +921,7 @@ def check_snp_init():
     # Command being used
     command = "SNP_PLATFORM_STATUS"
 
-    snp_plat_status = sev_apis.run_snp_platform_status()
+    snp_plat_status = ioctl.run_snp_platform_status()
 
     found_result = str(snp_plat_status.state)
 
@@ -941,7 +945,7 @@ def check_rmp_init():
     # Command being used
     command = "SNP_PLATFORM_STATUS"
 
-    snp_plat_status = sev_apis.run_snp_platform_status()
+    snp_plat_status = ioctl.run_snp_platform_status()
 
     found_result = str(snp_plat_status.is_rmp_init)
 
@@ -965,7 +969,7 @@ def compare_tcb_versions():
     # Command being used
     command = "SNP_PLATFORM_STATUS"
 
-    snp_plat_status = sev_apis.run_snp_platform_status()
+    snp_plat_status = ioctl.run_snp_platform_status()
 
     current_tcb = str(snp_plat_status.tcb_version)
     reported_tcb = str(snp_plat_status.reported_tcb)
