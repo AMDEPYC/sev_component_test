@@ -9,7 +9,7 @@ Use --testlocal flag to test encryption of VMs being run already.
 Use --printlocal flag to print the memory of VMs being run.
     Can provide VM command to specify one desired VM, or not provide anything to launch UI.
 Use --autotest flag to launch automatic VM encryption test on the tiny VM provided.
-    Can ask to perform an unencrypted test or sev test (sev default). (sev-es functionality still in progress)
+    Can ask to perform an unencrypted test or sev test (sev default).
 Use --nonVerbose flag to run program without any prints
 Will return 1 if any of the desired tests fails, will return 0 if all the desired tests pass.
 '''
@@ -17,8 +17,11 @@ import argparse
 import datetime
 import sys
 import component_tests
+import snp_component_tests
 import local_vm_test
 import auto_vm_test
+
+from message_printing import print_overall_result, print_test_result
 
 parser = argparse.ArgumentParser(
     description="Raise flags for different test functionalities.")
@@ -35,44 +38,6 @@ parser.add_argument("-at", "--autotest", nargs='?',
                     default="not raised")
 parser.add_argument("-nv", "--nonverbose", help="Run test with no print statements.",
                     action="store_true")
-
-def print_test_result(component, command, found, expectation, result):
-    '''
-    Format in which test results will be printed.
-    '''
-    # Colors for print statments
-    colors = {
-        'reset': '\033[0m',
-        'red': '\033[31m',
-        'green': '\033[32m',
-        'yellow': '\033[93m'
-    }
-    if result:
-        # Test passes
-        print("- " + component + " [ " + command + " ] Found: "
-              + found + " Expected: " + expectation + colors["green"]
-              + " OK" + colors["reset"])
-    else:
-        # Test fails
-        print("- " + component + " [ " + command + " ] Found: "
-              + found + " Expected: " + expectation + colors["red"]
-              + " FAIL" + colors["reset"])
-
-
-def print_overall_result(test, result):
-    '''
-    Print the current system test result in this format. The current system test and its result.
-    '''
-    colors = {
-        'reset': '\033[0m',
-        'red': '\033[31m',
-        'green': '\033[32m',
-        'yellow': '\033[93m'
-    }
-    if result:
-        print(test + colors['green'] + " PASS" + colors['reset'])
-    else:
-        print(test + colors['red'] + " FAIL" + colors['reset'])
 
 
 def check_system_support_test(sme_enabled, non_verbose, system_os, stop_failure):
@@ -220,6 +185,7 @@ def run_sev_es_test(non_verbose, system_os, stop_failure):
         component_tests.check_kernel: ['SEV-ES'],
         component_tests.find_os_support: ['SEV-ES'],
         component_tests.find_asid_count: ['SEV-ES'],
+        component_tests.check_if_sev_es_init: [],
         component_tests.find_libvirt_support: [],
         component_tests.find_qemu_support: [system_os, 'SEV-ES'],
         component_tests.test_all_ovmf_paths: [
@@ -252,31 +218,35 @@ def run_sev_es_test(non_verbose, system_os, stop_failure):
 def run_sev_snp_test(non_verbose, system_os, stop_failure):
     '''
     Run the existing OS checks that query the system capabilites,
-    and informs if the current system setup can run SEV-ES.
+    and informs if the current system setup can run SEV-SNP.
     '''
     # if not nonVerbose:
     print("\nComparing Host OS componenets to known SEV-SNP minimum versions:")
 
     running_tests = {
         component_tests.find_os_support : ['SEV-SNP'],
-        component_tests.check_reserved_rmp : [],
-        component_tests.check_sev_fw_veresion: [],
+        snp_component_tests.check_reserved_rmp : [],
+        snp_component_tests.check_fw_version_for_snp: [],
+        snp_component_tests.check_iommu_enablement: [],
+        snp_component_tests.find_snp_cpuid_support: [system_os]
     }
 
     snp_tests = {
-        component_tests.check_snp_init : [],
-        component_tests.check_rmp_init : [],
-        component_tests.compare_tcb_versions : []
+        snp_component_tests.check_snp_init : [],
+        snp_component_tests.check_rmp_init : [],
+        snp_component_tests.compare_tcb_versions : []
     }
-
-
-    
+  
     # Will turn false if any check fails
     pass_check = True
 
     for test, components in running_tests.items():
         current_component, current_command, current_found_result,\
             current_expectation, current_test_result = test(*components)
+        # IOMMU enablement test passes. No need to provide message if test passes.
+        # If test fails, provide error message.
+        if test == snp_component_tests.check_iommu_enablement and current_test_result:
+            continue
         if not non_verbose:
             print_test_result(current_component, current_command,
                                 current_found_result, current_expectation, current_test_result)
@@ -382,8 +352,8 @@ def main():
     # Print explanation
     if not args.nonverbose:
         print("\nRunning SEV Component Test tool. "
-        "For more running options, run 'python3 SEVComponentTest.py -h'.")
-        print("For more information please go to https://developer.amd.com/sev/")
+        "For more running options, run 'python sev_component_test.py -h'.")
+        print("For more information please go to https://www.amd.com/en/developer/sev.htm/")
     
     # Overall program result
     all_requested_tests_pass = True

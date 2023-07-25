@@ -5,10 +5,10 @@ import string
 import subprocess
 import re
 import os
-from warnings import warn
 from packaging import version
-import ovmf_shared_functions
+import ovmf_functions
 import ioctl
+from message_printing import print_warning_message
 
 def hex_to_binary(hex_num: str) -> bin:
     '''
@@ -23,7 +23,8 @@ def check_eax(read_out: list, feature: str) -> int:
     depending on the future that is being checked (SME or SEV).
     '''
     # Getting the eax register value
-    hex_num = read_out[1][9]
+    hex_num = read_out[1][0:10]
+    
     # Converting it to binary and then flipping it in order to read it.
     binary_value = hex_to_binary(hex_num)
     binary_value = binary_value[::-1]
@@ -34,6 +35,8 @@ def check_eax(read_out: list, feature: str) -> int:
     # Return bit 1 if testing for SEV
     if feature == "SEV":
         return int(binary_value[1])
+    if feature == "SNP":
+        return int(binary_value[4])
     return None
 
 
@@ -84,9 +87,9 @@ def find_cpuid_support(distro: str, feature: str):
     # Error caught
     except (subprocess.CalledProcessError) as err:
         if err.stderr.decode("utf-8").strip():
-            ovmf_shared_functions.print_warning_message(
+            print_warning_message(
                 component, err.stderr.decode("utf-8").strip())
-        else: ovmf_shared_functions.print_warning_message(component, "Could not read cpuid for eax")
+        else: print_warning_message(component, "Could not read cpuid for eax")
         return component, command, found_result, expectation, test_result
 
 
@@ -132,7 +135,7 @@ def check_virtualization():
     except (subprocess.CalledProcessError) as err:
         # Error with subprocess, print error, return failure
         if err.stderr.decode("utf-8").strip():
-            ovmf_shared_functions.print_warning_message(
+            print_warning_message(
                 component, err.stderr.decode("utf-8").strip())
         return component, command, found_result, expectation, test_result
 
@@ -277,10 +280,10 @@ def get_kernel_version():
     # Error with subprocess
     except (subprocess.CalledProcessError) as err:
         if err.stderr.decode("utf-8").strip():
-            ovmf_shared_functions.print_warning_message(
+            print_warning_message(
                 "Kernel version", err.stderr.decode("utf-8").strip())
         else:
-            ovmf_shared_functions.print_warning_message(
+            print_warning_message(
                 "Kernel version", 'kernel version not found')
         return False, False
 
@@ -305,7 +308,7 @@ def find_asid_count(feature:string):
     elif feature == "SEV-ES":
         grep_command = "grep SEV-ES"
     else:
-        ovmf_shared_functions.print_warning_message(component, "invalid feature")
+        print_warning_message(component, "invalid feature")
         return component, 'NONE', found_result, 'NONE', test_result
 
     # Complete command
@@ -313,9 +316,9 @@ def find_asid_count(feature:string):
 
     kernel_version, _ = get_kernel_version()
     if not kernel_version:
-        ovmf_shared_functions.print_warning_message(component, "Could not get kernel version.")
+        print_warning_message(component, "Could not get kernel version.")
     if version.parse(kernel_version) < version.parse('5.11') and feature == "SEV":
-        ovmf_shared_functions.print_warning_message(
+        print_warning_message(
             component,
             "Update kernel to 5.11 version to find available ASIDS for SEV"
             " or check in BIOS settings"
@@ -340,7 +343,7 @@ def find_asid_count(feature:string):
 
         except (subprocess.CalledProcessError) as err:
             if err.stderr.decode("utf-8").strip():
-                ovmf_shared_functions.print_warning_message(
+                print_warning_message(
                     component, err.stderr.decode("utf-8").strip())
             return component, command, found_result, expectation, test_result
     return component, command, found_result, expectation, test_result
@@ -372,7 +375,7 @@ def find_os_support(feature:string):
         expectation = "SEV-SNP supported"
         grep_command = "grep -w 'SEV-SNP supported'"
     else:
-        ovmf_shared_functions.print_warning_message(component, "invalid feature")
+        print_warning_message(component, "invalid feature")
         return component, 'NONE', found_result, 'NONE', test_result
 
     # Complete command
@@ -402,7 +405,7 @@ def find_os_support(feature:string):
 
     except (subprocess.CalledProcessError) as err:
         if err.stderr.decode("utf-8").strip():
-            ovmf_shared_functions.print_warning_message(
+            print_warning_message(
                 component, err.stderr.decode("utf-8").strip())
         return component, command, found_result, expectation, test_result
 
@@ -441,10 +444,10 @@ def get_linux_distro():
         return linux_os, linux_version
     except (subprocess.CalledProcessError) as err:
         if err.stderr.decode("utf-8").strip():
-            ovmf_shared_functions.print_warning_message("Getting linux distribution error: ",
+            print_warning_message("Getting linux distribution error: ",
                                   err.stderr.decode("utf-8").strip())
         else:
-            ovmf_shared_functions.print_warning_message("Getting linux distribution error: ",
+            print_warning_message("Getting linux distribution error: ",
                                   "Distro can't be found")
         return False, False
 
@@ -482,13 +485,12 @@ def check_linux_distribution():
             if version.parse(distro_version) >= version.parse(min_version):
                 test_result = True
         else:
-            ovmf_shared_functions.print_warning_message(
+            print_warning_message(
                 component, "os distribution not in known minimum list")
             # SEV could still work with OS, this test just doesn't apply
             test_result = True
 
     return component, command, found_result, expectation, test_result
-
 
 def check_kernel(feature:str):
     '''
@@ -513,7 +515,7 @@ def check_kernel(feature:str):
         minimum_version = "5.11"
     else:
         expectation = 'NONE'
-        ovmf_shared_functions.print_warning_message(component, "Invalid feature")
+        print_warning_message(component, "Invalid feature")
         return component, command, found_result, expectation, test_result
 
     # Get kernel version
@@ -530,6 +532,9 @@ def check_kernel(feature:str):
     return component, command, found_result, expectation, test_result
 
 def check_if_sev_init():
+    '''
+    Use SEV_PLATFORM_STATUS ioctl to see if sev is initialized in the current system.
+    '''
     # Turns true if test passes
     test_result = False
     # Name of component being tested
@@ -550,54 +555,7 @@ def check_if_sev_init():
     if sev_init_status:
         test_result = True
 
-    return component, command, found_result, expectation, test_result 
-
-def find_sev_libvirt_enablement(system_os:str):
-    '''
-    Find if SEV is enabled using LibVirt domcapabilities.
-    A good way to confirm that SEV is enabled on the host OS.
-    This test will only run if LibVirt is found to be installed and it is also compatible with SEV.
-    '''
-    warn("This test is now deprecated, look at check_if_sev_init()", DeprecationWarning)
-    # Turns true if test passes
-    test_result = False
-    # Name of component being tested
-    component = "LibVirt SEV enablement"
-    # Expected test result
-    expectation = "<sev supported='yes'>"
-    # Will change to what the test finds
-    found_result = "EMPTY"
-    # Command being used
-    command = "virsh domcapabilities | grep sev"
-    try:
-        libvirt_domcapabilities = subprocess.run(
-            "virsh domcapabilities", shell=True, check=True, capture_output=True)
-        grep_read = subprocess.run("grep sev", shell=True,
-                                   input=libvirt_domcapabilities.stdout, check=True, capture_output=True)
-        if grep_read:
-            found_result = grep_read.stdout.decode(
-                "utf-8").split('\n')[0].strip()
-            if found_result == "<sev supported='yes'>":
-                test_result = True
-       # Return results
-        return component, command, found_result, expectation, test_result
-    except (subprocess.CalledProcessError) as err:
-        if err.stderr.decode("utf-8").strip():
-            # Erorr raised by snp qemu was found
-            if err.stderr.decode("utf-8").split('\n')[1].strip() == "error: Unable to read from monitor: Connection reset by peer":
-                # Find if snp qemu is the one installed in the system.
-                # If snp qemu is the one installed, then ignore libvirt test due to compability issues.
-                if is_this_snp_QEMU(system_os):
-                    ovmf_shared_functions.print_warning_message(component, "system is running SNP QEMU, which is not compatible with libvirt, test ignored.")
-                    test_result = True
-                    found_result = "test ignored"
-            else:        
-                ovmf_shared_functions.print_warning_message(component,
-                                  err.stderr.decode("utf-8").strip())
-        else:
-            ovmf_shared_functions.print_warning_message(component, "could not grab systems's libvirt domcapabilities.")
-        return component, command, found_result, expectation, test_result
-
+    return component, command, found_result, expectation, test_result
 
 def find_libvirt_support():
     '''
@@ -634,10 +592,10 @@ def find_libvirt_support():
 
     except (subprocess.CalledProcessError) as err:
         if err.stderr.decode("utf-8").strip():
-            ovmf_shared_functions.print_warning_message(component,
+            print_warning_message(component,
                                   err.stderr.decode("utf-8").strip())
         else:
-            ovmf_shared_functions.print_warning_message(component,
+            print_warning_message(component,
                                   "Grabbing libvirt version failed.")
         return component, command, found_result, expectation, test_result
 
@@ -674,7 +632,7 @@ def find_qemu_support(system_os:string, feature:string):
         min_version = "6.0"
     else:
         expectation = 'NONE'
-        ovmf_shared_functions.print_warning_message(component, "Invalid feature provided")
+        print_warning_message(component, "Invalid feature provided")
         return component, command, found_result, expectation, test_result
 
     try:
@@ -694,52 +652,9 @@ def find_qemu_support(system_os:string, feature:string):
         return component, command, found_result, expectation, test_result
     except (subprocess.CalledProcessError) as err:
         if err.stderr.decode("utf-8").strip():
-            ovmf_shared_functions.print_warning_message("Getting QEMU version error: ",
+            print_warning_message("Getting QEMU version error: ",
                                   err.stderr.decode("utf-8").strip())
         return component, command, found_result, expectation, test_result
-
-def is_this_snp_QEMU(system_os):
-    '''
-    This function will be called if a specific error happens when trying to find the system's domcapabilities using libvirt.
-    It will look for an external snp qemu and the current default qemu installed in the system.
-    If the versions match then the program will assume you are running the snp qemu as the default.
-    '''
-    # Grab the system installed qemu
-    _, _, system_installed_qemu, _, _ = find_qemu_support(system_os, 'SEV')
-    installed_qemu_version = get_version_num(system_installed_qemu)
-    # Find the current version of the snp qemu
-    try:
-        #Find snp-build path
-        snp_release_path_raw = subprocess.run("find / -name 'snp-release*'", shell=True, check=True, capture_output=True)
-        snp_release_paths = snp_release_path_raw.stdout.decode("utf-8").split('\n')
-        for path in snp_release_paths:
-            if path and path.strip()[-2:] != "gz":
-                snp_release_path = path
-                break
-        # No SNP build found
-        if not snp_release_path:
-            ovmf_shared_functions.print_warning_message("Checking SNP QEMU version", "No SNP QEMU found, double check installation.")
-        # Path to snp qemu
-        snp_qemu_path = snp_release_path + "/usr/local/bin/qemu-system-x86_64"
-        # Get snp qemu version
-        snp_qemu_version_raw = subprocess.run(snp_qemu_path + " --version", shell=True, check=True, capture_output=True)
-        snp_qemu_version = get_version_num(snp_qemu_version_raw.stdout.decode("utf-8").split('\n')[0])
-        #Check if versions match
-        if snp_qemu_version == installed_qemu_version:
-            return True
-        else:
-            return False
-    # Error was raised by subprocess
-    except (subprocess.CalledProcessError) as err:
-        if err.stderr.decode("utf-8").strip():
-            ovmf_shared_functions.print_warning_message("Getting SNP QEMU version: ",
-                                  err.stderr.decode("utf-8").strip())
-        else:
-            ovmf_shared_functions.print_warning_message("Getting SNP QEMU version: ",
-                                  "Could not get SNP QEMU version.")
-
-
-
 
 def test_all_ovmf_paths(system_os:string, min_commit_date):
     '''
@@ -756,11 +671,11 @@ def test_all_ovmf_paths(system_os:string, min_commit_date):
 
     # Get the default path
     ovmf_default_command, default_ovmf_path,\
-        is_default_pkg_install, default_pkg_date = ovmf_shared_functions.get_default_ovmf_path(
+        is_default_pkg_install, default_pkg_date = ovmf_functions.get_default_ovmf_path(
             system_os)
 
     # Get all of the manually built paths
-    built_ovmf_paths = ovmf_shared_functions.get_built_ovmf_paths()
+    built_ovmf_paths = ovmf_functions.get_built_ovmf_paths()
 
     # Paths found
     paths_found = []
@@ -789,7 +704,7 @@ def test_all_ovmf_paths(system_os:string, min_commit_date):
         for path in built_ovmf_paths:
             curr_path_true = False
             # Call to get commit date from given path
-            built_ovmf_date, built_command = ovmf_shared_functions.get_commit_date(
+            built_ovmf_date, built_command = ovmf_functions.get_commit_date(
                 path)
             # Call to compare path commit date with given minimum date for either SEV or SEV-ES
             # Current path meets minimum
@@ -807,182 +722,6 @@ def test_all_ovmf_paths(system_os:string, min_commit_date):
             paths_found.append(path_components)
 
     return one_path_true, paths_found
-
-def get_rmp_address(dmesg_string):
-    '''
-    Function to find the reserved rmp table addresses from the string presented in the kernel message.
-    '''
-    # CCP
-    ccp = ''
-    # RMP table notice
-    rmp_message = ''
-    # Addresses found
-    rmp_address = ''
-
-    out_of_ccp = False
-    in_rmp_address = False
-
-    for char in dmesg_string:
-        if not char.isalpha() and not out_of_ccp:
-            ccp += char
-        # Out of the ccp, collect RMP string
-        elif char.isalpha() and not out_of_ccp:
-            out_of_ccp = True
-            rmp_message += char
-        # Continue to collect RMP messge
-        elif out_of_ccp and not in_rmp_address and char != "[":
-            rmp_message += char
-        # Collected the message, now collet the adress if there is any.
-        elif out_of_ccp and char == "[" and not in_rmp_address:
-            in_rmp_address = True
-            rmp_address += char
-        elif in_rmp_address:
-            rmp_address += char
-
-    # Formatted string returned
-    return rmp_message, rmp_address
-    
-
-def check_reserved_rmp():
-    '''
-    Find if the reserved rmp tables in the system by checking the kernel message.
-    '''
-    # Turns true if test passes
-    test_result = False
-    # Name of component being tested
-    component = "Reserved RMP table adress"
-    # Expected test result
-    expectation = "SEV-SNP: RMP table physical address"
-    # Will change to what the test finds
-    found_result = "EMPTY"
-    # Command being used
-    command = "dmesg | grep RMP"
-
-    try:
-        # Get dmesg
-        dmesg_read = subprocess.run(
-            "dmesg", shell=True, check=True, capture_output=True)
-        # grep from rmp
-        grep_read = subprocess.run("grep RMP", shell=True,
-                                  input=dmesg_read.stdout, check=True, capture_output=True)
-        # Grab message and adress
-        rmp_message, rmp_address = get_rmp_address(grep_read.stdout.decode('utf-8'))
-        # Success message
-        if rmp_message.strip() == "SEV-SNP: RMP table physical address":
-            found_result = rmp_message.strip() + " " + rmp_address.strip()
-            test_result = True
-        # Message not correct test fails.
-        else:
-            found_result = rmp_message
-        return component, command, found_result, expectation, test_result
-    except (subprocess.CalledProcessError) as err:
-        if err.stderr.decode("utf-8").strip():
-            ovmf_shared_functions.print_warning_message("Getting RMP adresses from kernel messge: ",
-                                  err.stderr.decode("utf-8").strip())
-        return component, command, found_result, expectation, test_result
-
-def check_sev_fw_veresion():
-    '''
-    Use SEV_PLATFORM_STATUS to find the current fw version in the system.
-    If FW version is not newest test fails, SNP would not be usable.
-    '''
-    # Turns true if test passes
-    test_result = False
-    # Name of component being tested
-    component = "System SEV firmware version"
-    # Expected test result
-    expectation = "SEV-SNP API VERSION 1.51"
-    # Will change to what the test finds
-    found_result = ""
-    # Command being used
-    command = "SEV_PLATFORM_STATUS"
-
-    sev_plat_status = ioctl.run_sev_platform_status()
-
-    found_result = str(sev_plat_status.api_major) + "." + str(sev_plat_status.api_minor)
-
-    if found_result == "1.51":
-        test_result = True
-    
-    return component, command, found_result, expectation, test_result
-
-def check_snp_init():
-    '''
-    Check the SNP_PLATFORM_STATUS to see if SNP is init.
-    '''
-    # Turns true if test passes
-    test_result = False
-    # Name of component being tested
-    component = "SNP INIT"
-    # Expected test result
-    expectation = "1"
-    # Will change to what the test finds
-    found_result = ""
-    # Command being used
-    command = "SNP_PLATFORM_STATUS"
-
-    snp_plat_status = ioctl.run_snp_platform_status()
-
-    found_result = str(snp_plat_status.state)
-
-    if found_result == expectation:
-        test_result = True
-
-    return component, command, found_result, expectation, test_result
-
-def check_rmp_init():
-    '''
-    Check the SNP_PLATFORM_STATUS to see if RMP is init.
-    '''
-    # Turns true if test passes
-    test_result = False
-    # Name of component being tested
-    component = "RMP INIT"
-    # Expected test result
-    expectation = "1"
-    # Will change to what the test finds
-    found_result = ""
-    # Command being used
-    command = "SNP_PLATFORM_STATUS"
-
-    snp_plat_status = ioctl.run_snp_platform_status()
-
-    found_result = str(snp_plat_status.is_rmp_init)
-
-    if found_result == expectation:
-        test_result = True
-
-    return component, command, found_result, expectation, test_result
-
-def compare_tcb_versions():
-    '''
-    Make sure that the reported TCB and the current TCB versions match up.
-    '''
-    # Turns true if test passes
-    test_result = False
-    # Name of component being tested
-    component = "Comparing TCB versions"
-    # Expected test result
-    expectation = "Current TCB matches reported TCB"
-    # Will change to what the test finds
-    found_result = ""
-    # Command being used
-    command = "SNP_PLATFORM_STATUS"
-
-    snp_plat_status = ioctl.run_snp_platform_status()
-
-    current_tcb = str(snp_plat_status.tcb_version)
-    reported_tcb = str(snp_plat_status.reported_tcb)
-    
-
-    if reported_tcb == current_tcb:
-        test_result = True
-
-    found_result = "Current TCB: " + current_tcb + " Reported TCB: " + reported_tcb
-
-    return component, command, found_result, expectation, test_result
-    
-
 
 def check_bios_enablement():
     '''
@@ -1019,7 +758,7 @@ def check_bios_enablement():
     except (subprocess.CalledProcessError) as err:
         # Error in subprocess, print warning message
         if err.stderr.decode("utf-8").strip():
-            ovmf_shared_functions.print_warning_message(
+            print_warning_message(
                 component, err.stderr.decode("utf-8").strip())
         # BIOS message not found, SEV probably enabled in BIOS. This means the test passes,
         # Or the dmesg message is unavailable on current fw.
@@ -1028,3 +767,29 @@ def check_bios_enablement():
             test_result = True
         # Return results
         return component, command, found_result, expectation, test_result
+
+def check_if_sev_es_init():
+    '''
+    Use SEV_PLATFORM_STATUS ioctl to see if sev-es is initialized in the current system.
+    '''
+    # Turns true if test passes
+    test_result = False
+    # Name of component being tested
+    component = "SEV-ES INIT STATE"
+    # Will change to what the test finds
+    found_result = "EMPTY"
+    # Command being used
+    command = "SEV apis"
+    #Expected result
+    expectation = "1"
+
+    sev_plat_status = ioctl.run_sev_platform_status()
+
+    sev_es_init_status = sev_plat_status.config_es
+
+    found_result = str(sev_es_init_status)
+
+    if sev_es_init_status:
+        test_result = True
+
+    return component, command, found_result, expectation, test_result

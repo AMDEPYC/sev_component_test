@@ -6,9 +6,10 @@ import re
 from time import sleep
 import signal
 import encryption_test
-import ovmf_shared_functions
+import ovmf_functions
 import local_vm_test
 import component_tests
+from message_printing import print_warning_message
 
 def format_ebx_for_cbit(read_out: str):
     '''
@@ -61,14 +62,14 @@ def grab_cbit_from_cpuid(distro:str) -> str:
         return format_ebx_for_cbit(ebx_read[1])
     except (subprocess.CalledProcessError) as err:
         if err.stderr.decode("utf-8").strip():
-            ovmf_shared_functions.print_warning_message(
+            print_warning_message(
                 "Grabbing C-Bit for VM launch", err.stderr.decode("utf-8").strip())
-        else: ovmf_shared_functions.print_warning_message(
+        else: print_warning_message(
             "Grabbing C-Bit for VM launch", "Could not read cpuid for ebx")
         if err.stderr.decode("utf-8").strip():
-            ovmf_shared_functions.print_warning_message(
+            print_warning_message(
                 "Grabbing C-Bit for VM launch", err.stderr.decode("utf-8").strip())
-        else: ovmf_shared_functions.print_warning_message(
+        else: print_warning_message(
             "Grabbing C-Bit for VM launch", "Could not read cpuid for ebx")
 
 def launch_vm(system_os:string, current_directory:string,vm_type:str):
@@ -146,7 +147,7 @@ def set_up_machine(system_os:string, current_directory:string, non_verbose:bool)
     Set up vm folder to be able to launch auto VM
     '''
     # Get the path to the first compatible SEV OVMF build
-    ovmf_path = ovmf_shared_functions.get_path_to_ovmf(system_os)
+    ovmf_path = ovmf_functions.get_path_to_ovmf(system_os)
     # Check if OVMF_VARS.fd path exists
     if os.path.exists(ovmf_path + '/OVMF_VARS.fd'):
         # Copy file to autoVM folder

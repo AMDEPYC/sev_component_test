@@ -2,11 +2,11 @@
 IOCTL function library to use platform status command.
 '''
 import fcntl
-from ctypes import *
+import ctypes
 import struct
 from enum import IntEnum
+from message_printing import print_warning_message
 
-import ovmf_shared_functions
 
 # Defining constants for IOCTL functions
 # Constant for linux portability
@@ -29,7 +29,7 @@ _IOC_READ = 2
 
 
 
-def _IOC(dir, type, nr, size):
+def ioc(dir, type, nr, size):
     '''
     Python implementation of the _IOC macro from linux.
     It takes a set of parameters, and calculates a ioctl request number based on those parameters.
@@ -41,13 +41,13 @@ def _IOC(dir, type, nr, size):
            nr   << _IOC_NRSHIFT   | \
            size << _IOC_SIZESHIFT
 
-def _IOWR(type, nr, size):
+def iowr(type, nr, size):
     '''
     Python implementation of the ``_IOWR(...)`` macro from Linux.
     The ``_IOWR(...)`` macro calculates a ioctl request number for ioctl request that use
     the data for both reading (input) and writing (output).
     '''
-    return _IOC(_IOC_READ | _IOC_WRITE, type, nr, size)
+    return ioc(_IOC_READ | _IOC_WRITE, type, nr, size)
 
 
 class SEVCommand(IntEnum):
@@ -68,50 +68,50 @@ class SEVCommand(IntEnum):
     SNP_GET_EXT_CONFIG = 11
     SEV_MAX = 12
 
-class SEVIssueCommand(Structure):
+class SEVIssueCommand(ctypes.Structure):
     '''
     Structure to issue SEV commands.
     '''
     _pack_ = 1
-    _fields_ = [('cmd', c_uint),
-                ('data', c_ulong),
-                ('error',c_uint)]
+    _fields_ = [('cmd', ctypes.c_uint),
+                ('data', ctypes.c_ulong),
+                ('error', ctypes.c_uint)]
 
-class SevPlatformStatus(Structure):
+class SevPlatformStatus(ctypes.Structure):
     '''
     Structure for sev platform status
     '''
     _pack_ = 1
-    _fields_ = [('api_major', c_uint8),
-                ('api_minor', c_uint8),
-                ('state', c_uint8),
-                ('owner', c_uint8, 1),
-                ('reserved', c_uint8, 7),
-                ('config_es',c_uint32, 1),
-                ('reserved2', c_uint32, 23),
-                ('build', c_uint32, 8),
-                ('guest_count', c_uint32)]
+    _fields_ = [('api_major', ctypes.c_uint8),
+                ('api_minor', ctypes.c_uint8),
+                ('state', ctypes.c_uint8),
+                ('owner', ctypes.c_uint8, 1),
+                ('reserved', ctypes.c_uint8, 7),
+                ('config_es', ctypes.c_uint32, 1),
+                ('reserved2', ctypes.c_uint32, 23),
+                ('build', ctypes.c_uint32, 8),
+                ('guest_count', ctypes.c_uint32)]
 
-class SevSnpPlatformSatus(Structure):
+class SevSnpPlatformSatus(ctypes.Structure):
     '''
     Structure for snp platform status
     '''
     _pack_ = 1
-    _fields_ = [('api_major', c_uint8),
-                ('api_minor', c_uint8),
-                ('state', c_uint8),
-                ('is_rmp_init', c_uint8, 1),
-                ('reserved', c_uint8, 7),
-                ('build_id', c_uint32),
-                ('mask_chip_id', c_uint8, 1),
-                ('reserved2', c_uint32, 31),
-                ('guest_count', c_uint32),
-                ('tcb_version', c_uint64),
-                ('reported_tcb', c_uint64)]
+    _fields_ = [('api_major', ctypes.c_uint8),
+                ('api_minor', ctypes.c_uint8),
+                ('state', ctypes.c_uint8),
+                ('is_rmp_init', ctypes.c_uint8, 1),
+                ('reserved', ctypes.c_uint8, 7),
+                ('build_id', ctypes.c_uint32),
+                ('mask_chip_id', ctypes.c_uint8, 1),
+                ('reserved2', ctypes.c_uint32, 31),
+                ('guest_count', ctypes.c_uint32),
+                ('tcb_version', ctypes.c_uint64),
+                ('reported_tcb', ctypes.c_uint64)]
 
-SEV_IOC_TYPE: c_char = 'S'
+SEV_IOC_TYPE: ctypes.c_char = 'S'
 
-SEV_ISSUE_CMD = _IOWR(ord('S'), 0x0, struct.calcsize('=IQI'))
+SEV_ISSUE_CMD = iowr(ord('S'), 0x0, struct.calcsize('=IQI'))
 
 def run_sev_platform_status():
     '''
@@ -122,12 +122,12 @@ def run_sev_platform_status():
     try:
         with open(dev_sev, 'wb') as fd:
             sev_data: SevPlatformStatus = SevPlatformStatus()
-            sev_args: SEVIssueCommand = SEVIssueCommand(SEVCommand.SEV_PLATFORM_STATUS, addressof(sev_data))
+            sev_args: SEVIssueCommand = SEVIssueCommand(SEVCommand.SEV_PLATFORM_STATUS, ctypes.addressof(sev_data))
             sev_ioctl_return = fcntl.ioctl(fd, SEV_ISSUE_CMD, sev_args)
             if sev_ioctl_return == 0:
                 return sev_data
     except OSError as err:
-        ovmf_shared_functions.print_warning_message("SEV_PLATFORM_STATUS", str(err))
+        print_warning_message("SEV_PLATFORM_STATUS", str(err))
 
 def run_snp_platform_status():
     '''
@@ -138,9 +138,9 @@ def run_snp_platform_status():
     try:
         with open(dev_sev, 'wb') as fd:
             snp_data: SevSnpPlatformSatus = SevSnpPlatformSatus()
-            snp_args: SEVIssueCommand = SEVIssueCommand(SEVCommand.SNP_PLATFORM_STATUS, addressof(snp_data))
+            snp_args: SEVIssueCommand = SEVIssueCommand(SEVCommand.SNP_PLATFORM_STATUS, ctypes.addressof(snp_data))
             snp_ioctl_return = fcntl.ioctl(fd, SEV_ISSUE_CMD, snp_args)
             if snp_ioctl_return == 0:
                 return snp_data
     except OSError as err:
-        ovmf_shared_functions.print_warning_message("SNP_PLATFORM_STATUS", str(err))
+        print_warning_message("SNP_PLATFORM_STATUS", str(err))
