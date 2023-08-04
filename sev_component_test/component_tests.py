@@ -68,7 +68,9 @@ def find_cpuid_support(feature: str):
 
     if eax:
         bin_value = bin(eax)[2:][::-1]
-        test_result = bin_value[int(test_bit)]
+        enabled_bit = bin_value[int(test_bit)]
+        if int(enabled_bit) == 1:
+            test_result = True
         found_result = "EAX bit " + test_bit + " is " + str(test_result)
     else:
         print_warning_message(component, "Could not read cpuid for eax")
@@ -551,7 +553,7 @@ def check_sme_enablement():
         msr_value = readmsr(0xC0010010)
         bin_value = bin(msr_value)[2:][::-1]
         meme_val = bin_value[23]
-        if meme_val:
+        if int(meme_val) == 1:
             test_result = True
         found_result = "MSR 0xC0010010 bit 23 is " + str(meme_val)
         return component, command, found_result, expectation, test_result

@@ -51,7 +51,7 @@ def check_if_snp_enabled():
         msr_value = readmsr(0xC0010010)
         bin_value = bin(msr_value)[2:][::-1]
         snp_val = bin_value[24]
-        if snp_val:
+        if int(snp_val) == 1:
             test_result = True
         found_result = "MSR 0xC0010010 bit 23 is " + str(snp_val)
         return component, command, found_result, expectation, test_result
