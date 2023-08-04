@@ -40,7 +40,7 @@ parser.add_argument("-nv", "--nonverbose", help="Run test with no print statemen
                     action="store_true")
 
 
-def check_system_support_test(sme_enabled, non_verbose, system_os, stop_failure):
+def check_system_support_test(sme_enabled, non_verbose, stop_failure):
     '''
     Run the existing system support checks that query the system capabilites and informs if the
     system can or cannot run SEV features.
@@ -54,15 +54,14 @@ def check_system_support_test(sme_enabled, non_verbose, system_os, stop_failure)
     pass_check = True
     # Tests to be run
     running_tests = {
-        component_tests.find_cpuid_support: (system_os, 'SEV'),
+        component_tests.find_cpuid_support: ['SEV'],
         component_tests.check_virtualization: (),
-        component_tests.check_bios_enablement: ()
+        component_tests.check_sme_enablement: ()
     }
 
     if sme_enabled:
         current_component, current_command, current_found_result,\
-            current_expectation, current_test_result = component_tests.find_cpuid_support(
-                system_os, 'SME')
+            current_expectation, current_test_result = component_tests.find_cpuid_support('SME')
         if not non_verbose:
             print_test_result(current_component, current_command,
                               current_found_result, current_expectation, current_test_result)
@@ -75,10 +74,6 @@ def check_system_support_test(sme_enabled, non_verbose, system_os, stop_failure)
     for test, components in running_tests.items():
         current_component, current_command, current_found_result,\
             current_expectation, current_test_result = test(*components)
-        # BIOS enablement test passes. No need to provide message if test passes. 
-        # If test fails, provide error message.
-        if test == component_tests.check_bios_enablement and current_test_result:
-            continue
         if not non_verbose:
             print_test_result(current_component, current_command,
                               current_found_result, current_expectation, current_test_result)
@@ -98,14 +93,14 @@ def run_sme_test(non_verbose, stop_failure):
     '''
 
     if not non_verbose:
-        print("\nComparing Host OS componenets to known SME minimum versions:")
+        print("\nComparing Host OS componenets to known SME requirements:")
 
     # Will turn false if any check fails
     pass_check = True
 
     # Looks at the kernel message to see if SME is enabled.
     current_component, current_command, current_found_result,\
-        current_expectation, current_test_result = component_tests.find_os_support(
+        current_expectation, current_test_result = component_tests.find_cpuid_support(
             'SME')
     if not non_verbose:
         print_test_result(current_component, current_command,
@@ -134,10 +129,10 @@ def run_sev_test(non_verbose, system_os, stop_failure):
     pass_check = True
     # Tests to be run
     running_tests = {
+        component_tests.find_cpuid_support: ["SEV"],
+        component_tests.find_asid_count: ["SEV"],
         component_tests.check_linux_distribution: [],
         component_tests.check_kernel: ['SEV'],
-        component_tests.find_os_support: ['SEV'],
-        component_tests.find_asid_count: ['SEV'],
         component_tests.check_if_sev_init: [],
         component_tests.find_libvirt_support: [],
         component_tests.find_qemu_support: [system_os, 'SEV'],
@@ -182,12 +177,12 @@ def run_sev_es_test(non_verbose, system_os, stop_failure):
     pass_check = True
 
     running_tests = {
+        component_tests.find_cpuid_support: ['SEV-ES'],
         component_tests.check_kernel: ['SEV-ES'],
-        component_tests.find_os_support: ['SEV-ES'],
         component_tests.find_asid_count: ['SEV-ES'],
         component_tests.check_if_sev_es_init: [],
         component_tests.find_libvirt_support: [],
-        component_tests.find_qemu_support: [system_os, 'SEV-ES'],
+        component_tests.find_qemu_support: [system_os,'SEV-ES'],
         component_tests.test_all_ovmf_paths: [
             system_os, datetime.date(2020, 11, 1)]
     }
@@ -215,7 +210,7 @@ def run_sev_es_test(non_verbose, system_os, stop_failure):
 
     return pass_check
 
-def run_sev_snp_test(non_verbose, system_os, stop_failure):
+def run_sev_snp_test(non_verbose, stop_failure):
     '''
     Run the existing OS checks that query the system capabilites,
     and informs if the current system setup can run SEV-SNP.
@@ -224,16 +219,16 @@ def run_sev_snp_test(non_verbose, system_os, stop_failure):
     print("\nComparing Host OS componenets to known SEV-SNP minimum versions:")
 
     running_tests = {
-        component_tests.find_os_support : ['SEV-SNP'],
-        snp_component_tests.check_reserved_rmp : [],
+        component_tests.find_cpuid_support: ['SEV-SNP'],
+        snp_component_tests.check_if_snp_enabled: [],
         snp_component_tests.check_fw_version_for_snp: [],
         snp_component_tests.check_iommu_enablement: [],
-        snp_component_tests.find_snp_cpuid_support: [system_os]
     }
 
     snp_tests = {
         snp_component_tests.check_snp_init : [],
         snp_component_tests.check_rmp_init : [],
+        snp_component_tests.get_rmp_address: [],
         snp_component_tests.compare_tcb_versions : []
     }
   
@@ -292,12 +287,12 @@ def run_component_tests(non_verbose, system_os, stop_failure, feature_tests):
     # Test results are added here
     results = {}
     # System support test result
-    tests[check_system_support_test] = [False, non_verbose, system_os, stop_failure,'SYSTEM SUPPORT']
+    tests[check_system_support_test] = [False, non_verbose, stop_failure,'SYSTEM SUPPORT']
     results['SYSTEM SUPPORT'] = False
 
     # SME enabled
     if set(['sme']).intersection(set(feature_tests)):
-        tests[check_system_support_test] = [True, non_verbose, system_os, stop_failure,'SYSTEM SUPPORT']
+        tests[check_system_support_test] = [True, non_verbose, stop_failure,'SYSTEM SUPPORT']
         tests[run_sme_test] = [non_verbose, stop_failure,'SME COMPONENT TEST']
         results['SME COMPONENT TEST'] = False
     else:
@@ -316,7 +311,7 @@ def run_component_tests(non_verbose, system_os, stop_failure, feature_tests):
 
     # SEV-SNP enabled
     if set(['sev-snp']).intersection(set(feature_tests)):
-        tests[run_sev_snp_test] = [non_verbose, system_os, stop_failure,'SEV-SNP COMPONENT TEST']
+        tests[run_sev_snp_test] = [non_verbose, stop_failure,'SEV-SNP COMPONENT TEST']
         results['SEV-SNP COMPONENT TEST'] = False
     else:
         results['SEV-SNP COMPONENT TEST'] = True
@@ -360,7 +355,7 @@ def main():
 
     component_test_pass, sev_pass = run_component_tests(args.nonverbose, system_os, args.stopfailure,args.test)
 
-        # If one of the desired system check fails, then overall test will return failure
+    # If one of the desired system check fails, then overall test will return failure
     if not component_test_pass:
         all_requested_tests_pass = False
     
@@ -412,3 +407,8 @@ def main():
 
 if __name__ == '__main__':
     sys.exit(main())
+
+
+#TODO
+# Processor family test
+# IOMMU check

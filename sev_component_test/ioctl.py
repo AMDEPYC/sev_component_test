@@ -122,7 +122,8 @@ def run_sev_platform_status():
     try:
         with open(dev_sev, 'wb') as fd:
             sev_data: SevPlatformStatus = SevPlatformStatus()
-            sev_args: SEVIssueCommand = SEVIssueCommand(SEVCommand.SEV_PLATFORM_STATUS, ctypes.addressof(sev_data))
+            sev_args: SEVIssueCommand = SEVIssueCommand(
+                SEVCommand.SEV_PLATFORM_STATUS, ctypes.addressof(sev_data))
             sev_ioctl_return = fcntl.ioctl(fd, SEV_ISSUE_CMD, sev_args)
             if sev_ioctl_return == 0:
                 return sev_data
@@ -138,7 +139,8 @@ def run_snp_platform_status():
     try:
         with open(dev_sev, 'wb') as fd:
             snp_data: SevSnpPlatformSatus = SevSnpPlatformSatus()
-            snp_args: SEVIssueCommand = SEVIssueCommand(SEVCommand.SNP_PLATFORM_STATUS, ctypes.addressof(snp_data))
+            snp_args: SEVIssueCommand = SEVIssueCommand(
+                SEVCommand.SNP_PLATFORM_STATUS, ctypes.addressof(snp_data))
             snp_ioctl_return = fcntl.ioctl(fd, SEV_ISSUE_CMD, snp_args)
             if snp_ioctl_return == 0:
                 return snp_data

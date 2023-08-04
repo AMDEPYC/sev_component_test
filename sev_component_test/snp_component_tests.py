@@ -4,8 +4,8 @@ Component tests to test availability of SNP in a system.
 import subprocess
 import ioctl
 from packaging import version
+from component_tests import readmsr
 from message_printing import print_warning_message
-from component_tests import check_eax
 
 def check_fw_version_for_snp():
     '''
@@ -32,77 +32,34 @@ def check_fw_version_for_snp():
 
     return component, command, found_result, expectation, test_result
 
-def get_rmp_address(dmesg_string):
+def check_if_snp_enabled():
     '''
-    Function to find the reserved rmp table addresses from the string presented in the kernel message.
-    '''
-    # CCP
-    ccp = ''
-    # RMP table notice
-    rmp_message = ''
-    # Addresses found
-    rmp_address = ''
-
-    out_of_ccp = False
-    in_rmp_address = False
-
-    for char in dmesg_string:
-        if not char.isalpha() and not out_of_ccp:
-            ccp += char
-        # Out of the ccp, collect RMP string
-        elif char.isalpha() and not out_of_ccp:
-            out_of_ccp = True
-            rmp_message += char
-        # Continue to collect RMP messge
-        elif out_of_ccp and not in_rmp_address and char != "[" and not char.isnumeric():
-            rmp_message += char
-        # Collected the message, now collet the adress if there is any.
-        elif out_of_ccp and (char == "[" or char.isnumeric()) and not in_rmp_address:
-            in_rmp_address = True
-            rmp_address += char
-        elif in_rmp_address:
-            rmp_address += char
-
-    # Formatted string returned
-    return rmp_message, rmp_address
-
-def check_reserved_rmp():
-    '''
-    Find if the reserved rmp tables in the system by checking the kernel message.
+    Check the msr address 0xC0010010 bit 24 to see if snp is enabled in the system.
     '''
     # Turns true if test passes
     test_result = False
     # Name of component being tested
-    component = "Reserved RMP table adress"
+    component = "SNP enabled in MSR"
     # Expected test result
-    expectation = "SEV-SNP: RMP table physical address"
+    expectation = "MSR 0xC0010010 bit 24 is 1"
     # Will change to what the test finds
-    found_result = "EMPTY"
+    found_result = ""
     # Command being used
-    command = "dmesg | grep RMP"
+    command = "MSR 0xC0010010"
 
     try:
-        # Get dmesg
-        dmesg_read = subprocess.run(
-            "dmesg", shell=True, check=True, capture_output=True)
-        # grep from rmp
-        grep_read = subprocess.run("grep RMP", shell=True,
-                                  input=dmesg_read.stdout, check=True, capture_output=True)
-        # Grab message and adress
-        rmp_message, rmp_address = get_rmp_address(grep_read.stdout.decode('utf-8'))
-
-        # Success message
-        if rmp_message.strip() == "SEV-SNP: RMP table physical address":
-            found_result = rmp_message.strip() + " " + rmp_address.strip()
+        msr_value = readmsr(0xC0010010)
+        bin_value = bin(msr_value)[2:][::-1]
+        snp_val = bin_value[24]
+        if snp_val:
             test_result = True
-        # Message not correct test fails.
-        else:
-            found_result = rmp_message
+        found_result = "MSR 0xC0010010 bit 23 is " + str(snp_val)
         return component, command, found_result, expectation, test_result
-    except (subprocess.CalledProcessError) as err:
-        if err.stderr.decode("utf-8").strip():
-            print_warning_message("Getting RMP adresses from kernel messge: ",
-                                  err.stderr.decode("utf-8").strip())
+    except OSError as err:
+        # Could not read the msr, print a warning and return a failure
+        print_warning_message(component, f"Failed to read the desired MSR: {err}")
+        # Return results
+        found_result = 'Failed to read MSR'
         return component, command, found_result, expectation, test_result
 
 def check_iommu_enablement():
@@ -151,54 +108,7 @@ def check_iommu_enablement():
         # Return results
         return component, command, found_result, expectation, test_result
  
-def find_snp_cpuid_support(distro: str):
-    '''
-    Check the CPUID function 0x8000001f and look at the eax register in order to tell
-    whether or not the current CPU supports SNP.
-    '''
-    # Turns true if test passes
-    test_result = False
-    # Get the appropriate test bit
-    test_bit = "4"
-    # Name of component being tested
-    component = "CPUID function 0x8000001f bit " + test_bit + " for SNP."
-    # Expected test result
-    expectation = "EAX bit " + test_bit + " to be '1'"
-    # Will change to what the test finds
-    found_result = "EAX bit " + test_bit + " is '0'"
 
-    # Command being used
-    if distro == 'rhel':
-        command = "cpuid -r -1 0x8000001f"
-    else:
-        command = "cpuid -r -1 -l 0x8000001f"
-
-    try:
-        # Read CPUID
-        cpuid_read = subprocess.run(
-            command, shell=True,
-            check=True, capture_output=True)
-        # Format the return string
-        eax_read_raw = subprocess.run(
-            "sed 's/.*eax=//'", input=cpuid_read.stdout,
-            shell=True, check=True, capture_output=True)
-        eax_read = eax_read_raw.stdout.decode("utf-8").split('\n')
-            
-        # Check the eax register
-        if check_eax(eax_read, "SNP"):
-            test_result = True
-            found_result = "EAX bit " + test_bit + " is 1"
-
-        # Return test results
-        return component, command, found_result, expectation, test_result
-
-    # Error caught
-    except (subprocess.CalledProcessError) as err:
-        if err.stderr.decode("utf-8").strip():
-            print_warning_message(
-                component, err.stderr.decode("utf-8").strip())
-        else: print_warning_message(component, "Could not read cpuid for eax")
-        return component, command, found_result, expectation, test_result
 
 def check_snp_init():
     '''
@@ -247,6 +157,35 @@ def check_rmp_init():
         test_result = True
 
     return component, command, found_result, expectation, test_result
+
+def get_rmp_address():
+    '''
+    Check the msr addresses 0xC0010132 - 0xC0010133 to get the rmp address range.
+    '''
+    # Turns true if test passes
+    test_result = False
+    # Name of component being tested
+    component = "RMP table addresses"
+    # Expected test result
+    expectation = "RMP table physical address range xxx - xxx"
+    # Will change to what the test finds
+    found_result = ""
+    # Command being used
+    command = "MSR 0xC0010132 - 0xC0010133"
+
+    try:
+        rmp_base = readmsr(0xC0010132)
+        rmp_end = readmsr(0xC0010133)
+        if rmp_base and rmp_end:
+            test_result = True
+        found_result =  "RMP table physical address range " + str(hex(rmp_base)) + " - " + str(hex(rmp_end))
+        return component, command, found_result, expectation, test_result
+    except OSError as err:
+        # Could not read the msr, print a warning and return a failure
+        print_warning_message(component, f"Failed to read the desired MSR: {err}")
+        # Return results
+        found_result = 'Failed to read MSR'
+        return component, command, found_result, expectation, test_result
 
 def compare_tcb_versions():
     '''
