@@ -12,36 +12,109 @@ import ovmf_functions
 import ioctl
 from message_printing import print_warning_message
 
+def get_sme_string(dmesg_string:string) -> string:
+    '''
+    Format the SME support string from kernel message.
+    Remove ccp and return only SME support found string.
+    '''
+    # CCP
+    ccp = ''
+    # Formatted string will be returned here
+    sme_support = ''
+    out_of_ccp = False
+    for char in dmesg_string:
+
+        if not char.isalpha() and not out_of_ccp:
+            ccp += char
+        # Out of the ccp, collect SME Support string
+        elif char.isalpha() and not out_of_ccp:
+            out_of_ccp = True
+            sme_support += char
+        # Continue to collect SME messge
+        elif out_of_ccp:
+            sme_support += char
+
+    # Formatted string returned
+    return sme_support
+
+def find_tsme_enablement():
+    '''
+    Find OS enablement for TSME.
+    '''
+    # Test pass or Fail
+    test_result = False
+    # Component being tested
+    component = "TSME Enablement"
+    # Test findings
+    found_result = "EMPTY"
+    # Expectation
+    expectation = "AMD Memory Encrtyption Features active: SME"
+    
+    # Grep command for SME
+    grep_command = "grep SME"
+
+    # Complete command
+    command = "dmesg | grep SME"
+    # Test findings
+    found_result = "EMPTY"
+
+    try:
+        # Read using dmesg
+        dmesg_read = subprocess.run(
+            "dmesg", shell=True, check=True, capture_output=True)
+        # Grep for sme
+        test_string_raw = subprocess.run(grep_command, shell=True,
+                                         input=dmesg_read.stdout, check=True, capture_output=True)
+        test_string = test_string_raw.stdout.decode('utf-8').strip()
+        # Call to get formatted TSME enablement
+        found_result = get_sme_string(test_string)
+        test_result = True
+
+        return component, command, found_result, expectation, test_result
+    
+    # Error when reading dmesg
+    except (subprocess.CalledProcessError) as err:
+        if err.stderr.decode("utf-8").strip():
+            print_warning_message(
+                component, err.stderr.decode("utf-8").strip())
+        return component, command, found_result, expectation, test_result
+
 def get_cpuid(function, register) -> int:
     '''
     Get register value for a cpuid funtion
     '''
-
     registers = ['eax', 'ebx', 'ecx', 'edx']
 
     try:
+        # read the cpuid function
         register_values = cpuid(function)
+    # If some value error, then return none (cpuid failed)
     except ValueError:
         return None
 
+    # Create a dict of the register name matched with the value
     reg_dict = dict(zip(registers, register_values))
 
+    # Return the desired registerss
     return reg_dict[register]
 
 def readmsr(msr, cpu = 0):
     '''
     Read contents of dev cpu msr to get the desired msr value.
     '''
+    # Open MSR file
     msr_file = os.open(f'/dev/cpu/{cpu}/msr', os.O_RDONLY)
     os.lseek(msr_file, msr, os.SEEK_SET)
+    # Read value
     val = struct.unpack('Q', os.read(msr_file, 8))[0]
     os.close(msr_file)
+    # Return val
     return val
 
 def find_cpuid_support(feature: str):
     '''
     Check the CPUID function 0x8000001f and look at the eax register in order to tell
-    whether or not the current CPU supports SEV/SME.
+    whether or not the current CPU supports the desired feature
     '''
     # Turns true if test passes
     test_result = False
@@ -64,18 +137,102 @@ def find_cpuid_support(feature: str):
     # Command being used
     command = "cpuid 0x8000001f"
 
+    # Read eax register from cpuid function
     eax = get_cpuid(0x8000001f, 'eax')
 
+    # If eax has a value, read the desired bit and return result
     if eax:
         bin_value = bin(eax)[2:][::-1]
         enabled_bit = bin_value[int(test_bit)]
         if int(enabled_bit) == 1:
             test_result = True
         found_result = "EAX bit " + test_bit + " is " + str(test_result)
+    # eax has no value, cpuid read failed, print warning return failure
     else:
         print_warning_message(component, "Could not read cpuid for eax")
         found_result = "Could not read cpuid"
     return component, command, found_result, expectation, test_result
+
+def get_processor_model():
+    '''
+    Get the processor model name from the cpuid.
+    '''
+    # Read eax register from function 0x80000001
+    eax = get_cpuid(0x80000001, 'eax')
+
+    # eax read failed return none
+    if eax is None:
+        return None
+
+    # Generate bin value
+    bin_value = bin(eax)[2:][::-1]
+
+    # Base family bits [11:8]
+    base_family = int(bin_value[8:12][::-1],2)
+    # Extended family bits [27:20]
+    extended_family = int(bin_value[20:28][::-1],2)
+
+    # Base model bits [7:4]
+    base_model = bin_value[4:8][::-1]
+    # Extended model bits [19:16]
+    extended_model = bin_value[16:20][::-1]
+
+    # Family = base family + extended family
+    family = base_family + extended_family
+    # Model = extended_model:base model
+    model = int(extended_model + base_model, 2)
+
+    # Match family and model to known values
+    if (model, family) == (1,23):
+        return 'naples'
+    elif (model, family) == (49,23):
+        return 'rome'
+    elif (model, family) == (1, 25):
+        return 'milan'
+    elif (model, family) == (17, 25):
+        return 'genoa'
+    else:
+        return 'invalid cpu'
+
+def validate_cpu_model(feature: str):
+    '''
+    Get cpu model and validate that it can run the desired sev feature
+    '''
+    # Turns true if test passes
+    test_result = False
+    # dict to get values
+    sev_dict = {
+        'SEV':["naples","rome","milan","genoa"],
+        'SEV-ES':["rome","milan", "genoa"],
+        'SEV-SNP': ["milan", "genoa"]
+        }
+    # Name of component being tested
+    component = "CPU model generation support"
+    # Expected test result
+    expectation = sev_dict[feature][0] + " or newer model"
+
+    # Command being used
+    command = "cpuid 0x80000001"
+
+    # Get model from cpuid
+    model = get_processor_model()
+
+    # Model is none cpuid read failed
+    if model is None:
+        print_warning_message(component, "Failed to read cpuid to get cpu model")
+        found_result = "FAILURE"
+    # Invalid cpu found, SEV is not supported
+    elif model == "invalid cpu":
+        found_result = "Invalid CPU for SEV"
+    # Make sure model supports desired SEV feature
+    elif model in sev_dict[feature]:
+        test_result = True
+        found_result = feature + " supported by " + model
+    else:
+        found_result = feature + " not supported by " + model
+  
+    return component, command, found_result, expectation, test_result
+
 
 
 def check_virtualization():
@@ -179,7 +336,7 @@ def get_kernel_version():
 
 def find_asid_count(feature:string):
     '''
-    Get the system's available ASID count, if the kernel permits it.
+    Get the system's available ASID count using cpuid
     '''
     # Test pass or Fail
     test_result = False
@@ -194,17 +351,22 @@ def find_asid_count(feature:string):
     # Checking cpuid function 0x8000001f register edx
     command = "cpuid 0x8000001f"
 
+    # Get SEV ASIDS
     if feature == 'SEV':
+        # Total available ASIDS
         ecx = get_cpuid(0x8000001f, 'ecx')
+        # SEV-ES reserved ASIDS
         edx = get_cpuid(0x8000001f, 'edx')
         if edx and ecx:
             asids = ecx - (edx - 1)
             if asids > 0:
                 test_result = True
             found_result = str(asids) + " ASIDs"
+        # Registers are none, cpuid read failed
         elif edx is None or ecx is None:
             found_result = "failed to read cpuid."
             print_warning_message(component, "Could not read cpuid to find SEV ASIDs")
+    # Get SEV-ES/SEV-SNP ASIDS
     elif feature == 'SEV-ES':
         edx = get_cpuid(0x8000001f, 'edx')
         if edx:
@@ -212,6 +374,7 @@ def find_asid_count(feature:string):
             if asids > 0:
                 test_result = True
             found_result = str(asids) + " ASIDs"
+        # edx is none, cpuid read failed
         elif edx is None:
             found_result = "failed to read cpuid."
             print_warning_message(component, "Could not read cpuid to find SEV-ES ASIDs")
@@ -357,13 +520,14 @@ def check_if_sev_init():
     #Expected result
     expectation = "1"
 
+    # Call platform status ioctl and get the init state
     sev_plat_status = ioctl.run_sev_platform_status()
-
     sev_init_status = sev_plat_status.state
 
     found_result = str(sev_init_status)
 
-    if sev_init_status:
+    # If 1 then sev is init
+    if sev_init_status == 1:
         test_result = True
 
     return component, command, found_result, expectation, test_result
@@ -549,6 +713,8 @@ def check_sme_enablement():
     found_result = ""
     # Command being used
     command = "MSR 0xC0010010"
+
+    # Read MSR and check bit 23 for enablement
     try:
         msr_value = readmsr(0xC0010010)
         bin_value = bin(msr_value)[2:][::-1]
@@ -557,6 +723,7 @@ def check_sme_enablement():
             test_result = True
         found_result = "MSR 0xC0010010 bit 23 is " + str(meme_val)
         return component, command, found_result, expectation, test_result
+    # If OSerror, MSR failed, print warning and return failure
     except OSError as err:
         # Could not read the msr, print a warning and return a failure
         print_warning_message(component, f"Failed to read the desired MSR: {err}")
@@ -579,13 +746,14 @@ def check_if_sev_es_init():
     #Expected result
     expectation = "1"
 
+    # Use SEV ioctl config es platform status to check for SEV-ES init.
     sev_plat_status = ioctl.run_sev_platform_status()
-
     sev_es_init_status = sev_plat_status.config_es
 
     found_result = str(sev_es_init_status)
 
-    if sev_es_init_status:
+    # If config is 1 then test passes
+    if sev_es_init_status == 1:
         test_result = True
 
     return component, command, found_result, expectation, test_result

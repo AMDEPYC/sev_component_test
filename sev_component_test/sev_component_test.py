@@ -11,6 +11,7 @@ Use --printlocal flag to print the memory of VMs being run.
 Use --autotest flag to launch automatic VM encryption test on the tiny VM provided.
     Can ask to perform an unencrypted test or sev test (sev default).
 Use --nonVerbose flag to run program without any prints
+Use --enablement flag to only test for SEV enablment on the system (ignore package support)
 Will return 1 if any of the desired tests fails, will return 0 if all the desired tests pass.
 '''
 import argparse
@@ -38,15 +39,18 @@ parser.add_argument("-at", "--autotest", nargs='?',
                     default="not raised")
 parser.add_argument("-nv", "--nonverbose", help="Run test with no print statements.",
                     action="store_true")
+parser.add_argument("-e", "--enablement",
+                    help="Run test to only check for enablement (ignore package support)",
+                    action="store_true")
 
 
-def check_system_support_test(sme_enabled, non_verbose, stop_failure):
+def check_system_support_test(non_verbose, stop_failure):
     '''
     Run the existing system support checks that query the system capabilites and informs if the
     system can or cannot run SEV features.
     '''
 
-    # Not print if nonVerbose raised (Will see this alot)
+    # Dont't print if nonVerbose raised
     if not non_verbose:
         print("\nQuerying for system capabilities:")
 
@@ -58,18 +62,6 @@ def check_system_support_test(sme_enabled, non_verbose, stop_failure):
         component_tests.check_virtualization: (),
         component_tests.check_sme_enablement: ()
     }
-
-    if sme_enabled:
-        current_component, current_command, current_found_result,\
-            current_expectation, current_test_result = component_tests.find_cpuid_support('SME')
-        if not non_verbose:
-            print_test_result(current_component, current_command,
-                              current_found_result, current_expectation, current_test_result)
-        if not current_test_result and not stop_failure:
-            pass_check = False
-        # Test failed, stop failure not enabled.
-        elif not current_test_result and stop_failure:
-            return False
 
     for test, components in running_tests.items():
         current_component, current_command, current_found_result,\
@@ -98,25 +90,27 @@ def run_sme_test(non_verbose, stop_failure):
     # Will turn false if any check fails
     pass_check = True
 
-    # Looks at the kernel message to see if SME is enabled.
-    current_component, current_command, current_found_result,\
-        current_expectation, current_test_result = component_tests.find_cpuid_support(
-            'SME')
-    if not non_verbose:
-        print_test_result(current_component, current_command,
-                          current_found_result, current_expectation, current_test_result)
-    # Stop running checks immediately if the test fails and the stopfailure flag is enabled.
-    if not current_test_result and not stop_failure:
-        pass_check = False
-    # Test failed, stop failure not enabled.
-    elif not current_test_result and stop_failure:
-        return False
+    running_tests = {
+        component_tests.find_cpuid_support: ['SME'],
+        component_tests.find_tsme_enablement: []
+    }
 
-    # Return SME test result
+    for test, components in running_tests.items():
+        current_component, current_command, current_found_result,\
+            current_expectation, current_test_result = test(*components)
+        if not non_verbose:
+            print_test_result(current_component, current_command,
+                              current_found_result, current_expectation, current_test_result)
+        if not current_test_result and not stop_failure:
+            pass_check = False
+        # Test failed, stop failure not enabled.
+        elif not current_test_result and stop_failure:
+            pass_check = False
+            break
     return pass_check
 
 
-def run_sev_test(non_verbose, system_os, stop_failure):
+def run_sev_test(non_verbose, system_os, stop_failure, enablement):
     '''
     Run the existing OS checks that query the system capabilites,
     and informs if the current system setup can run SEV.
@@ -129,16 +123,19 @@ def run_sev_test(non_verbose, system_os, stop_failure):
     pass_check = True
     # Tests to be run
     running_tests = {
+        component_tests.validate_cpu_model: ["SEV"],
         component_tests.find_cpuid_support: ["SEV"],
         component_tests.find_asid_count: ["SEV"],
         component_tests.check_linux_distribution: [],
         component_tests.check_kernel: ['SEV'],
         component_tests.check_if_sev_init: [],
-        component_tests.find_libvirt_support: [],
-        component_tests.find_qemu_support: [system_os, 'SEV'],
-        component_tests.test_all_ovmf_paths: [
-            system_os, datetime.date(2018, 7, 6)]
     }
+
+    # Package tests, ignore if enablment flag is on
+    if not enablement:
+        running_tests[component_tests.find_libvirt_support] = []
+        running_tests[component_tests.find_qemu_support] = [system_os, 'SEV']
+        running_tests[component_tests.test_all_ovmf_paths] = [system_os, datetime.date(2018, 7, 6)]
 
     #Run all tests
     for test, components in running_tests.items():
@@ -165,7 +162,7 @@ def run_sev_test(non_verbose, system_os, stop_failure):
     return pass_check
 
 
-def run_sev_es_test(non_verbose, system_os, stop_failure):
+def run_sev_es_test(non_verbose, system_os, stop_failure, enablement):
     '''
     Run the existing OS checks that query the system capabilites,
     and informs if the current system setup can run SEV-ES.
@@ -177,15 +174,17 @@ def run_sev_es_test(non_verbose, system_os, stop_failure):
     pass_check = True
 
     running_tests = {
+        component_tests.validate_cpu_model: ["SEV-ES"],
         component_tests.find_cpuid_support: ['SEV-ES'],
         component_tests.check_kernel: ['SEV-ES'],
         component_tests.find_asid_count: ['SEV-ES'],
         component_tests.check_if_sev_es_init: [],
-        component_tests.find_libvirt_support: [],
-        component_tests.find_qemu_support: [system_os,'SEV-ES'],
-        component_tests.test_all_ovmf_paths: [
-            system_os, datetime.date(2020, 11, 1)]
     }
+
+    if not enablement:
+        running_tests[component_tests.find_libvirt_support] = []
+        running_tests[component_tests.find_qemu_support] = [system_os, 'SEV-ES']
+        running_tests[component_tests.test_all_ovmf_paths] = [system_os, datetime.date(2020, 11, 1)]
 
     for test, components in running_tests.items():
         if test == component_tests.test_all_ovmf_paths:
@@ -219,10 +218,11 @@ def run_sev_snp_test(non_verbose, stop_failure):
     print("\nComparing Host OS componenets to known SEV-SNP minimum versions:")
 
     running_tests = {
+        component_tests.validate_cpu_model: ["SEV-SNP"],
         component_tests.find_cpuid_support: ['SEV-SNP'],
         snp_component_tests.check_if_snp_enabled: [],
         snp_component_tests.check_fw_version_for_snp: [],
-        snp_component_tests.check_iommu_enablement: [],
+        snp_component_tests.find_iommu_enablement: []
     }
 
     snp_tests = {
@@ -238,10 +238,6 @@ def run_sev_snp_test(non_verbose, stop_failure):
     for test, components in running_tests.items():
         current_component, current_command, current_found_result,\
             current_expectation, current_test_result = test(*components)
-        # IOMMU enablement test passes. No need to provide message if test passes.
-        # If test fails, provide error message.
-        if test == snp_component_tests.check_iommu_enablement and current_test_result:
-            continue
         if not non_verbose:
             print_test_result(current_component, current_command,
                                 current_found_result, current_expectation, current_test_result)
@@ -255,7 +251,7 @@ def run_sev_snp_test(non_verbose, stop_failure):
             break
     
     if pass_check:
-         for test, components in snp_tests.items():
+        for test, components in snp_tests.items():
             current_component, current_command, current_found_result,\
             current_expectation, current_test_result = test(*components)
             if not non_verbose:
@@ -273,7 +269,7 @@ def run_sev_snp_test(non_verbose, stop_failure):
     return pass_check
 
 
-def run_component_tests(non_verbose, system_os, stop_failure, feature_tests):
+def run_component_tests(non_verbose, system_os, stop_failure, feature_tests, enablement):
     '''
     Function to run all of the current tests,
     will return the result of each individual system test,
@@ -287,24 +283,23 @@ def run_component_tests(non_verbose, system_os, stop_failure, feature_tests):
     # Test results are added here
     results = {}
     # System support test result
-    tests[check_system_support_test] = [False, non_verbose, stop_failure,'SYSTEM SUPPORT']
+    tests[check_system_support_test] = [non_verbose, stop_failure,'SYSTEM SUPPORT']
     results['SYSTEM SUPPORT'] = False
 
     # SME enabled
     if set(['sme']).intersection(set(feature_tests)):
-        tests[check_system_support_test] = [True, non_verbose, stop_failure,'SYSTEM SUPPORT']
         tests[run_sme_test] = [non_verbose, stop_failure,'SME COMPONENT TEST']
         results['SME COMPONENT TEST'] = False
     else:
         results['SME COMPONENT TEST'] = True
 
     # SEV test result
-    tests[run_sev_test] = [non_verbose, system_os, stop_failure, 'SEV COMPONENT TEST']
+    tests[run_sev_test] = [non_verbose, system_os, stop_failure, enablement, 'SEV COMPONENT TEST']
     results['SEV COMPONENT TEST'] = False
 
     # SEV-ES enabled
     if set(['sev-es']).intersection(set(feature_tests)) or set(['sev-snp']).intersection(set(feature_tests)):
-        tests[run_sev_es_test] = [non_verbose, system_os, stop_failure,'SEV-ES COMPONENT TEST']
+        tests[run_sev_es_test] = [non_verbose, system_os, stop_failure, enablement,'SEV-ES COMPONENT TEST']
         results['SEV-ES COMPONENT TEST'] = False
     else:
         results['SEV-ES COMPONENT TEST'] = True
@@ -340,6 +335,7 @@ def main():
     Can provide VM command to specify one desired VM, or not provide anything to launch UI.
     Use --autotest flag to launch automatic VM encryption test on the tiny VM provided.
     Use --nonVerbose flag to run program without any prints
+    Use --enablement flag to only test for SEV enablment on the system (ignore package support)
     Will return 1 if any of the desired tests fails, will return 0 if all the desired tests pass.
     '''
     args = parser.parse_args()
@@ -353,7 +349,7 @@ def main():
     # Overall program result
     all_requested_tests_pass = True
 
-    component_test_pass, sev_pass = run_component_tests(args.nonverbose, system_os, args.stopfailure,args.test)
+    component_test_pass, sev_pass = run_component_tests(args.nonverbose, system_os, args.stopfailure,args.test ,args.enablement)
 
     # If one of the desired system check fails, then overall test will return failure
     if not component_test_pass:
@@ -407,8 +403,3 @@ def main():
 
 if __name__ == '__main__':
     sys.exit(main())
-
-
-#TODO
-# Processor family test
-# IOMMU check
