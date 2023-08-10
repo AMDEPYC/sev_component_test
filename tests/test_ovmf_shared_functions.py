@@ -1,6 +1,6 @@
 '''Testing for the omvf_shared_functions'''
 import datetime
-from sev_component_test import ovmf_shared_functions
+from sev_component_test import ovmf_functions
 
 
 def test_get_ovmf_version():
@@ -16,13 +16,13 @@ def test_get_ovmf_version():
     test_string_4 = "ovmf-202202-3.1.x86_64"
     pass_string_4 = "202202"
 
-    assert ovmf_shared_functions.get_ovmf_version(test_string_1) == pass_string_1,\
+    assert ovmf_functions.get_ovmf_version(test_string_1) == pass_string_1,\
         "the wrong ovmf version was retrieved from the string"
-    assert ovmf_shared_functions.get_ovmf_version(test_string_2) == pass_string_2,\
+    assert ovmf_functions.get_ovmf_version(test_string_2) == pass_string_2,\
         "the wrong ovmf version was retrieved from the string"
-    assert ovmf_shared_functions.get_ovmf_version(test_string_3) == pass_string_3,\
+    assert ovmf_functions.get_ovmf_version(test_string_3) == pass_string_3,\
         "the wrong ovmf version was retrieved from the string"
-    assert ovmf_shared_functions.get_ovmf_version(test_string_4) == pass_string_4,\
+    assert ovmf_functions.get_ovmf_version(test_string_4) == pass_string_4,\
         "the wrong ovmf version was retrieved from the string"
 
 def test_convert_ovmf_version_to_date():
@@ -38,11 +38,11 @@ def test_convert_ovmf_version_to_date():
     test_date_4 = "2020.11.14"
     pass_date_4 = datetime.date(2020,11,14)
 
-    assert ovmf_shared_functions.convert_ovmf_version_to_date(test_date_1) == pass_date_1,\
+    assert ovmf_functions.convert_ovmf_version_to_date(test_date_1) == pass_date_1,\
         "String was not converted to the correct date."
-    assert ovmf_shared_functions.convert_ovmf_version_to_date(test_date_2) == pass_date_2,\
+    assert ovmf_functions.convert_ovmf_version_to_date(test_date_2) == pass_date_2,\
         "String was not converted to the correct date."
-    assert ovmf_shared_functions.convert_ovmf_version_to_date(test_date_3) == pass_date_3,\
+    assert ovmf_functions.convert_ovmf_version_to_date(test_date_3) == pass_date_3,\
         "String was not converted to the correct date."
-    assert ovmf_shared_functions.convert_ovmf_version_to_date(test_date_4) == pass_date_4,\
+    assert ovmf_functions.convert_ovmf_version_to_date(test_date_4) == pass_date_4,\
         "String was not converted to the correct date."

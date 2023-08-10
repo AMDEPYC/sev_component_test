@@ -7,7 +7,7 @@ system_os ,_ = component_tests.get_linux_distro()
 
 # Test for auto-VM, currently only testing sev and unencrypted vm, 
 # sev-es support yet to be added to the qcow2 image.
-@pytest.mark.skipif(not run_sev_test(True, system_os, False),\
+@pytest.mark.skipif(not run_sev_test(True, system_os, False, False),\
     reason="Auto VM won't be able to be launched, do not test it.")
 def test_auto_vm_encryption():
     '''

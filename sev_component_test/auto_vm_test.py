@@ -6,57 +6,25 @@ import re
 from time import sleep
 import signal
 import encryption_test
-import ovmf_shared_functions
+import ovmf_functions
 import local_vm_test
 import component_tests
+from message_printing import print_warning_message
 
-def format_ebx_for_cbit(read_out: str):
-    '''
-    Get CPUID read and then parse the input to get the system's required c-bit
-    to encrypt the memory for VM. Alternate way instead of using domcapabilities.
-    '''
-    # Getting the hex ebx value
-    hex_num = read_out[2:10]
-    # Converting it to binary and then flipping it in order to read it.
-    binary_value = component_tests.hex_to_binary(hex_num)
-    binary_value = binary_value[::-1]
-    # Grabbing the c-bit bits (0:5)
-    c_bit_binary_flipped = binary_value[0:6]
-    # Flipping again to have them in the right order
-    c_bit_binary = c_bit_binary_flipped[::-1]
-    # Return the c-bit value
-    c_bit = int(c_bit_binary,2)
-    return c_bit
-
-def grab_cbit_from_cpuid(distro:str) -> str:
+def grab_cbit_from_cpuid() -> str:
     '''
     Using the CPUID 0x8000001f function and ebx register we can find the system's
     required cbit to encrypt information. Grab it in order to launch encrypted VMs.
     '''
-    # Command being used
-    if distro == 'rhel':
-        command = "cpuid -r -1 0x8000001f"
+    # read ebx
+    ebx = component_tests.get_cpuid(0x8000001f, 'ebx')
+    if ebx:
+        bin_value = bin(ebx)[::-1][0:6]
+        return int(bin_value,2)
     else:
-        command = "cpuid -r -1 -l 0x8000001f"
-    
-    try:
-        # Read CPUID
-        cpuid_read = subprocess.run(
-            command, shell=True,
-            check=True, capture_output=True)
-        # Format the return string
-        ebx_read_raw = subprocess.run(
-            "sed 's/.*ebx=//'", input=cpuid_read.stdout,
-            shell=True, check=True, capture_output=True)
-        ebx_read = ebx_read_raw.stdout.decode("utf-8").split('\n')
-        # Format read to get cbit
-        return format_ebx_for_cbit(ebx_read[1])
-    except (subprocess.CalledProcessError) as err:
-        if err.stderr.decode("utf-8").strip():
-            ovmf_shared_functions.print_warning_message(
-                "Grabbing C-Bit for VM launch", err.stderr.decode("utf-8").strip())
-        else: ovmf_shared_functions.print_warning_message(
+        print_warning_message(
             "Grabbing C-Bit for VM launch", "Could not read cpuid for ebx")
+        return None
 
 def launch_vm(system_os:string, current_directory:string,vm_type:str):
     '''
@@ -78,7 +46,7 @@ def launch_vm(system_os:string, current_directory:string,vm_type:str):
     qemu_command = qemu_command_list.get(system_os, "qemu-kvm")
 
     # Grab cbit for SEV use
-    system_cbit = grab_cbit_from_cpuid(system_os)
+    system_cbit = grab_cbit_from_cpuid()
 
     # Encryption command depending on encyption desired
     encryption_dictionary = {
@@ -132,7 +100,7 @@ def set_up_machine(system_os:string, current_directory:string, non_verbose:bool)
     Set up vm folder to be able to launch auto VM
     '''
     # Get the path to the first compatible SEV OVMF build
-    ovmf_path = ovmf_shared_functions.get_path_to_ovmf(system_os)
+    ovmf_path = ovmf_functions.get_path_to_ovmf(system_os)
     # Check if OVMF_VARS.fd path exists
     if os.path.exists(ovmf_path + '/OVMF_VARS.fd'):
         # Copy file to autoVM folder

@@ -5,47 +5,127 @@ import string
 import subprocess
 import re
 import os
+import struct
 from packaging import version
-import ovmf_shared_functions
+from cpuid import cpuid
+import ovmf_functions
+import ioctl
+from message_printing import print_warning_message
 
-def hex_to_binary(hex_num: str) -> bin:
+def get_sme_string(dmesg_string:string) -> string:
     '''
-    Converts hex number to binary.
+    Format the SME support string from kernel message.
+    Remove ccp and return only SME support found string.
     '''
-    return bin(int(hex_num, 16))[2:]
+    # CCP
+    ccp = ''
+    # Formatted string will be returned here
+    sme_support = ''
+    out_of_ccp = False
+    for char in dmesg_string:
 
+        if not char.isalpha() and not out_of_ccp:
+            ccp += char
+        # Out of the ccp, collect SME Support string
+        elif char.isalpha() and not out_of_ccp:
+            out_of_ccp = True
+            sme_support += char
+        # Continue to collect SME messge
+        elif out_of_ccp:
+            sme_support += char
 
-def check_eax(read_out: list, feature: str) -> int:
+    # Formatted string returned
+    return sme_support
+
+def find_tsme_enablement():
     '''
-    Get CPUID read and then parse the input to get either the bit 1 or bit 0 from the eax register,
-    depending on the future that is being checked (SME or SEV).
+    Find OS enablement for TSME.
     '''
-    # Getting the eax register value
-    hex_num = read_out[1][9]
-    # Converting it to binary and then flipping it in order to read it.
-    binary_value = hex_to_binary(hex_num)
-    binary_value = binary_value[::-1]
+    # Test pass or Fail
+    test_result = False
+    # Component being tested
+    component = "TSME Enablement"
+    # Test findings
+    found_result = "EMPTY"
+    # Expectation
+    expectation = "AMD Memory Encrtyption Features active: SME"
+    
+    # Grep command for SME
+    grep_command = "grep SME"
 
-    # Return bit 0 if testing for SME
-    if feature == "SME":
-        return int(binary_value[0])
-    # Return bit 1 if testing for SEV
-    if feature == "SEV":
-        return int(binary_value[1])
-    return None
+    # Complete command
+    command = "dmesg | grep SME"
+    # Test findings
+    found_result = "EMPTY"
 
+    try:
+        # Read using dmesg
+        dmesg_read = subprocess.run(
+            "dmesg", shell=True, check=True, capture_output=True)
+        # Grep for sme
+        test_string_raw = subprocess.run(grep_command, shell=True,
+                                         input=dmesg_read.stdout, check=True, capture_output=True)
+        test_string = test_string_raw.stdout.decode('utf-8').strip()
+        # Call to get formatted TSME enablement
+        found_result = get_sme_string(test_string)
+        test_result = True
 
-def find_cpuid_support(distro: str, feature: str):
+        return component, command, found_result, expectation, test_result
+    
+    # Error when reading dmesg
+    except (subprocess.CalledProcessError) as err:
+        if err.stderr.decode("utf-8").strip():
+            print_warning_message(
+                component, err.stderr.decode("utf-8").strip())
+        return component, command, found_result, expectation, test_result
+
+def get_cpuid(function, register) -> int:
+    '''
+    Get register value for a cpuid funtion
+    '''
+    registers = ['eax', 'ebx', 'ecx', 'edx']
+
+    try:
+        # read the cpuid function
+        register_values = cpuid(function)
+    # If some value error, then return none (cpuid failed)
+    except ValueError:
+        return None
+
+    # Create a dict of the register name matched with the value
+    reg_dict = dict(zip(registers, register_values))
+
+    # Return the desired registerss
+    return reg_dict[register]
+
+def readmsr(msr, cpu = 0):
+    '''
+    Read contents of dev cpu msr to get the desired msr value.
+    '''
+    # Open MSR file
+    msr_file = os.open(f'/dev/cpu/{cpu}/msr', os.O_RDONLY)
+    os.lseek(msr_file, msr, os.SEEK_SET)
+    # Read value
+    val = struct.unpack('Q', os.read(msr_file, 8))[0]
+    os.close(msr_file)
+    # Return val
+    return val
+
+def find_cpuid_support(feature: str):
     '''
     Check the CPUID function 0x8000001f and look at the eax register in order to tell
-    whether or not the current CPU supports SEV/SME.
+    whether or not the current CPU supports the desired feature
     '''
     # Turns true if test passes
     test_result = False
     # Get the appropriate test bit
     if feature == "SEV":
         test_bit = '1'
-    else:
+    elif feature == 'SEV-ES':
+        test_bit = '3'
+    elif feature == 'SEV-SNP':
+        test_bit = '4'
+    elif feature == 'SME':
         test_bit = '0'
     # Name of component being tested
     component = "CPUID function 0x8000001f bit " + test_bit + " for " + feature
@@ -55,37 +135,104 @@ def find_cpuid_support(distro: str, feature: str):
     found_result = "EAX bit " + test_bit + " is '0'"
 
     # Command being used
-    if distro == 'rhel':
-        command = "cpuid -r -1 0x8000001f"
-    else:
-        command = "cpuid -r -1 -l 0x8000001f"
+    command = "cpuid 0x8000001f"
 
-    try:
-        # Read CPUID
-        cpuid_read = subprocess.run(
-            command, shell=True,
-            check=True, capture_output=True)
-        # Format the return string
-        eax_read_raw = subprocess.run(
-            "sed 's/.*eax=//'", input=cpuid_read.stdout,
-            shell=True, check=True, capture_output=True)
+    # Read eax register from cpuid function
+    eax = get_cpuid(0x8000001f, 'eax')
 
-        eax_read = eax_read_raw.stdout.decode("utf-8").split('\n')
-        # Check the eax register
-        if check_eax(eax_read, feature):
+    # If eax has a value, read the desired bit and return result
+    if eax:
+        bin_value = bin(eax)[2:][::-1]
+        enabled_bit = bin_value[int(test_bit)]
+        if int(enabled_bit) == 1:
             test_result = True
-            found_result = "EAX bit " + test_bit + " is 1"
+        found_result = "EAX bit " + test_bit + " is " + str(test_result)
+    # eax has no value, cpuid read failed, print warning return failure
+    else:
+        print_warning_message(component, "Could not read cpuid for eax")
+        found_result = "Could not read cpuid"
+    return component, command, found_result, expectation, test_result
 
-        # Return test results
-        return component, command, found_result, expectation, test_result
+def get_processor_model():
+    '''
+    Get the processor model name from the cpuid.
+    '''
+    # Read eax register from function 0x80000001
+    eax = get_cpuid(0x80000001, 'eax')
 
-    # Error caught
-    except (subprocess.CalledProcessError) as err:
-        if err.stderr.decode("utf-8").strip():
-            ovmf_shared_functions.print_warning_message(
-                component, err.stderr.decode("utf-8").strip())
-        else: ovmf_shared_functions.print_warning_message(component, "Could not read cpuid for eax")
-        return component, command, found_result, expectation, test_result
+    # eax read failed return none
+    if eax is None:
+        return None
+
+    # Generate bin value
+    bin_value = bin(eax)[2:][::-1]
+
+    # Base family bits [11:8]
+    base_family = int(bin_value[8:12][::-1],2)
+    # Extended family bits [27:20]
+    extended_family = int(bin_value[20:28][::-1],2)
+
+    # Base model bits [7:4]
+    base_model = bin_value[4:8][::-1]
+    # Extended model bits [19:16]
+    extended_model = bin_value[16:20][::-1]
+
+    # Family = base family + extended family
+    family = base_family + extended_family
+    # Model = extended_model:base model
+    model = int(extended_model + base_model, 2)
+
+    # Match family and model to known values
+    if (model, family) == (1,23):
+        return 'naples'
+    elif (model, family) == (49,23):
+        return 'rome'
+    elif (model, family) == (1, 25):
+        return 'milan'
+    elif (model, family) == (17, 25):
+        return 'genoa'
+    else:
+        return 'invalid cpu'
+
+def validate_cpu_model(feature: str):
+    '''
+    Get cpu model and validate that it can run the desired sev feature
+    '''
+    # Turns true if test passes
+    test_result = False
+    # dict to get values
+    sev_dict = {
+        'SEV':["naples","rome","milan","genoa"],
+        'SEV-ES':["rome","milan", "genoa"],
+        'SEV-SNP': ["milan", "genoa"]
+        }
+    # Name of component being tested
+    component = "CPU model generation support"
+    # Expected test result
+    expectation = sev_dict[feature][0] + " or newer model"
+
+    # Command being used
+    command = "cpuid 0x80000001"
+
+    # Get model from cpuid
+    model = get_processor_model()
+
+    # Model is none cpuid read failed
+    if model is None:
+        print_warning_message(component, "Failed to read cpuid to get cpu model")
+        found_result = "FAILURE"
+    # Invalid cpu found, SEV is not supported
+    elif model == "invalid cpu":
+        found_result = "Invalid CPU for SEV"
+    # Make sure model supports desired SEV feature
+    elif model in sev_dict[feature]:
+        test_result = True
+        found_result = feature + " supported by " + model
+    else:
+        found_result = feature + " not supported by " + model
+  
+    return component, command, found_result, expectation, test_result
+
 
 
 def check_virtualization():
@@ -130,105 +277,11 @@ def check_virtualization():
     except (subprocess.CalledProcessError) as err:
         # Error with subprocess, print error, return failure
         if err.stderr.decode("utf-8").strip():
-            ovmf_shared_functions.print_warning_message(
+            print_warning_message(
                 component, err.stderr.decode("utf-8").strip())
         return component, command, found_result, expectation, test_result
 
-
-def get_sme_string(dmesg_string:string) -> string:
-    '''
-    Format the SME support string from kernel message.
-    Remove ccp and return only SME support found string.
-    '''
-    # CCP
-    ccp = ''
-    # Formatted string will be returned here
-    sme_support = ''
-    out_of_ccp = False
-    for char in dmesg_string:
-
-        if not char.isalpha() and not out_of_ccp:
-            ccp += char
-        # Out of the ccp, collect SME Support string
-        elif char.isalpha() and not out_of_ccp:
-            out_of_ccp = True
-            sme_support += char
-        # Continue to collect SME messge
-        elif out_of_ccp:
-            sme_support += char
-
-    # Formatted string returned
-    return sme_support
-
-
-def get_asid_num(asid_string:string) -> string:
-    '''
-    Format string to get ASIDs.
-    '''
-    num = ''
-    # Collect digits from string
-    for char in asid_string:
-        if char.isnumeric():
-            num += char
-        else:
-            break
-
-    return num
-
-
-def get_sev_string_and_asids(dmesg_string:string):
-    '''
-    Get SEV or SEV-ES support string from kernel message.
-    Remove ccp, return support string and ASIDs if available.
-    '''
-    # ccp
-    ccp = ''
-    # Will contain the kernel support string
-    sev_support = ''
-    # Will conatin found ASIDs
-    available_asids = ''
-    out_of_ccp = False
-    in_asid_count = False
-    support_found = False
-    for char in dmesg_string:
-        # At ccp
-        if not char.isalpha() and not out_of_ccp:
-            ccp += char
-        # Out of CCP, collect support string
-        elif char.isalpha() and not out_of_ccp:
-            out_of_ccp = True
-            sev_support += char
-        # Support string completed
-        elif (
-            sev_support in ('SVM: SEV supported',
-                            'SEV supported', 'SEV-ES supported',
-                            'SEV-ES and SEV-SNP supported')
-            and not support_found
-        ):
-            support_found = True
-        # Continue to collect support string
-        elif not support_found:
-            sev_support += char
-        # At available Available ASIDs in string
-        elif char.isnumeric() and not in_asid_count:
-            in_asid_count = True
-            available_asids += char
-        # Continue to collect ASID num
-        elif in_asid_count:
-            available_asids += char
-
-    # ASIDs found
-    if available_asids != '':
-        asid_num = get_asid_num(available_asids)
-    # No ASIDS found
-    else:
-        asid_num = False
-
-    # Return appropriate strings
-    return sev_support, available_asids, asid_num
-
-
-def get_version_num(line:string) -> string:
+def get_version_num(line:str) -> str:
     '''
     Get version number for given feature (Kernel, libvirt, qemu,ASIDs).
     Get versions in MAJOR.MINOR.PATHC format. Will populate patch with 0 if not available.
@@ -273,17 +326,17 @@ def get_kernel_version():
     # Error with subprocess
     except (subprocess.CalledProcessError) as err:
         if err.stderr.decode("utf-8").strip():
-            ovmf_shared_functions.print_warning_message(
+            print_warning_message(
                 "Kernel version", err.stderr.decode("utf-8").strip())
         else:
-            ovmf_shared_functions.print_warning_message(
+            print_warning_message(
                 "Kernel version", 'kernel version not found')
         return False, False
 
 
 def find_asid_count(feature:string):
     '''
-    Get the system's available ASID count, if the kernel permits it.
+    Get the system's available ASID count using cpuid
     '''
     # Test pass or Fail
     test_result = False
@@ -295,110 +348,41 @@ def find_asid_count(feature:string):
     expectation = "xxx ASIDs"
     # Test findings
     found_result = "EMPTY"
-    # Grab correct expectation and command according to the feature
-    if feature == "SEV":
-        grep_command = "grep -w 'SEV supported'"
-    elif feature == "SEV-ES":
-        grep_command = "grep SEV-ES"
-    else:
-        ovmf_shared_functions.print_warning_message(component, "invalid feature")
-        return component, 'NONE', found_result, 'NONE', test_result
+    # Checking cpuid function 0x8000001f register edx
+    command = "cpuid 0x8000001f"
 
-    # Complete command
-    command = "dmesg | " + grep_command
-
-    kernel_version, _ = get_kernel_version()
-    if not kernel_version:
-        ovmf_shared_functions.print_warning_message(component, "Could not get kernel version.")
-    if version.parse(kernel_version) < version.parse('5.11') and feature == "SEV":
-        ovmf_shared_functions.print_warning_message(
-            component,
-            "Update kernel to 5.11 version to find available ASIDS for SEV"
-            " or check in BIOS settings"
-        )
-        # Making it true, because this does not mean test should fail.
-        test_result = True
-    else:
-        try:
-            # Read using dmesg
-            dmesg_read = subprocess.run(
-                "dmesg", shell=True, check=True, capture_output=True)
-            # Grep specific component
-            test_string_raw = subprocess.run(grep_command, shell=True,
-                                             input=dmesg_read.stdout, check=True, capture_output=True)
-            test_string = test_string_raw.stdout.decode('utf-8').strip()
-            _, found_result, asid_num = get_sev_string_and_asids(test_string)
-            if found_result and int(asid_num) > 0:
+    # Get SEV ASIDS
+    if feature == 'SEV':
+        # Total available ASIDS
+        ecx = get_cpuid(0x8000001f, 'ecx')
+        # SEV-ES reserved ASIDS
+        edx = get_cpuid(0x8000001f, 'edx')
+        if edx and ecx:
+            asids = ecx - (edx - 1)
+            if asids > 0:
                 test_result = True
-
-            # Return result
-            return component, command, found_result, expectation, test_result
-
-        except (subprocess.CalledProcessError) as err:
-            if err.stderr.decode("utf-8").strip():
-                ovmf_shared_functions.print_warning_message(
-                    component, err.stderr.decode("utf-8").strip())
-            return component, command, found_result, expectation, test_result
-    return component, command, found_result, expectation, test_result
-
-
-def find_os_support(feature:string):
-    '''
-    Find OS support for feature in the kernel message.
-    Find available ASIDs if support found for SEV and SEV-ES.
-    '''
-    # Test pass or Fail
-    test_result = False
-    # Component being tested
-    component = "OS support for " + feature
-    # Test findings
-    found_result = "EMPTY"
-
-    # Grab correct expectation and command according to the feature
-    if feature == "SME":
-        expectation = "AMD Memory Encrtyption Features active: SME"
-        grep_command = "grep SME"
-    elif feature == "SEV":
-        expectation = "SEV supported"
-        grep_command = "grep -w 'SEV supported'"
-    elif feature == "SEV-ES":
-        expectation = "SEV-ES supported"
-        grep_command = "grep SEV-ES"
+            found_result = str(asids) + " ASIDs"
+        # Registers are none, cpuid read failed
+        elif edx is None or ecx is None:
+            found_result = "failed to read cpuid."
+            print_warning_message(component, "Could not read cpuid to find SEV ASIDs")
+    # Get SEV-ES/SEV-SNP ASIDS
+    elif feature == 'SEV-ES':
+        edx = get_cpuid(0x8000001f, 'edx')
+        if edx:
+            asids = edx - 1
+            if asids > 0:
+                test_result = True
+            found_result = str(asids) + " ASIDs"
+        # edx is none, cpuid read failed
+        elif edx is None:
+            found_result = "failed to read cpuid."
+            print_warning_message(component, "Could not read cpuid to find SEV-ES ASIDs")
     else:
-        ovmf_shared_functions.print_warning_message(component, "invalid feature")
+        print_warning_message(component, "invalid feature")
         return component, 'NONE', found_result, 'NONE', test_result
 
-    # Complete command
-    command = "dmesg | " + grep_command
-    # Test findings
-    found_result = "EMPTY"
-
-    try:
-        # Read using dmesg
-        dmesg_read = subprocess.run(
-            "dmesg", shell=True, check=True, capture_output=True)
-        # Grep specific component
-        test_string_raw = subprocess.run(grep_command, shell=True,
-                                         input=dmesg_read.stdout, check=True, capture_output=True)
-        test_string = test_string_raw.stdout.decode('utf-8').strip()
-
-        if test_string and feature == 'SME':
-            # Call to get formatted SME support
-            found_result = get_sme_string(test_string)
-            test_result = True
-        elif test_string and feature in ('SEV', 'SEV-ES'):
-            # Call to get formatted SEV support string
-            found_result, _, _ = get_sev_string_and_asids(test_string)
-            test_result = True
-
-        return component, command, found_result, expectation, test_result
-
-    except (subprocess.CalledProcessError) as err:
-        if err.stderr.decode("utf-8").strip():
-            ovmf_shared_functions.print_warning_message(
-                component, err.stderr.decode("utf-8").strip())
-        return component, command, found_result, expectation, test_result
-
+    return component, command, found_result, expectation, test_result
 
 def get_linux_distro():
     '''
@@ -434,10 +418,10 @@ def get_linux_distro():
         return linux_os, linux_version
     except (subprocess.CalledProcessError) as err:
         if err.stderr.decode("utf-8").strip():
-            ovmf_shared_functions.print_warning_message("Getting linux distribution error: ",
+            print_warning_message("Getting linux distribution error: ",
                                   err.stderr.decode("utf-8").strip())
         else:
-            ovmf_shared_functions.print_warning_message("Getting linux distribution error: ",
+            print_warning_message("Getting linux distribution error: ",
                                   "Distro can't be found")
         return False, False
 
@@ -475,15 +459,14 @@ def check_linux_distribution():
             if version.parse(distro_version) >= version.parse(min_version):
                 test_result = True
         else:
-            ovmf_shared_functions.print_warning_message(
+            print_warning_message(
                 component, "os distribution not in known minimum list")
             # SEV could still work with OS, this test just doesn't apply
             test_result = True
 
     return component, command, found_result, expectation, test_result
 
-
-def check_kernel(feature:string):
+def check_kernel(feature:str):
     '''
     Find current kernel version in system,
     then compare it against known minimums to see if system can run either SEV or SEV-ES.
@@ -506,7 +489,7 @@ def check_kernel(feature:string):
         minimum_version = "5.11"
     else:
         expectation = 'NONE'
-        ovmf_shared_functions.print_warning_message(component, "Invalid feature")
+        print_warning_message(component, "Invalid feature")
         return component, command, found_result, expectation, test_result
 
     # Get kernel version
@@ -522,41 +505,32 @@ def check_kernel(feature:string):
 
     return component, command, found_result, expectation, test_result
 
-
-def find_sev_libvirt_enablement():
+def check_if_sev_init():
     '''
-    Find if SEV is enabled using LibVirt domcapabilities.
-    A good way to confirm that SEV is enabled on the host OS.
-    This test will only run if LibVirt is found to be installed and it is also compatible with SEV.
+    Use SEV_PLATFORM_STATUS ioctl to see if sev is initialized in the current system.
     '''
     # Turns true if test passes
     test_result = False
     # Name of component being tested
-    component = "LibVirt SEV enablement"
-    # Expected test result
-    expectation = "<sev supported='yes'>"
+    component = "SEV INIT STATE"
     # Will change to what the test finds
     found_result = "EMPTY"
     # Command being used
-    command = "virsh domcapabilities | grep sev"
-    try:
-        libvirt_domcapabilities = subprocess.run(
-            "virsh domcapabilities", shell=True, check=True, capture_output=True)
-        grep_read = subprocess.run("grep sev", shell=True,
-                                   input=libvirt_domcapabilities.stdout, check=True, capture_output=True)
-        if grep_read:
-            found_result = grep_read.stdout.decode(
-                "utf-8").split('\n')[0].strip()
-            if found_result == "<sev supported='yes'>":
-                test_result = True
-       # Return results
-        return component, command, found_result, expectation, test_result
-    except (subprocess.CalledProcessError) as err:
-        if err.stderr.decode("utf-8").strip():
-            ovmf_shared_functions.print_warning_message(component,
-                                  err.stderr.decode("utf-8").strip())
-        return component, command, found_result, expectation, test_result
+    command = "SEV apis"
+    #Expected result
+    expectation = "1"
 
+    # Call platform status ioctl and get the init state
+    sev_plat_status = ioctl.run_sev_platform_status()
+    sev_init_status = sev_plat_status.state
+
+    found_result = str(sev_init_status)
+
+    # If 1 then sev is init
+    if sev_init_status == 1:
+        test_result = True
+
+    return component, command, found_result, expectation, test_result
 
 def find_libvirt_support():
     '''
@@ -593,8 +567,11 @@ def find_libvirt_support():
 
     except (subprocess.CalledProcessError) as err:
         if err.stderr.decode("utf-8").strip():
-            ovmf_shared_functions.print_warning_message(component,
+            print_warning_message(component,
                                   err.stderr.decode("utf-8").strip())
+        else:
+            print_warning_message(component,
+                                  "Grabbing libvirt version failed.")
         return component, command, found_result, expectation, test_result
 
 
@@ -630,7 +607,7 @@ def find_qemu_support(system_os:string, feature:string):
         min_version = "6.0"
     else:
         expectation = 'NONE'
-        ovmf_shared_functions.print_warning_message(component, "Invalid feature provided")
+        print_warning_message(component, "Invalid feature provided")
         return component, command, found_result, expectation, test_result
 
     try:
@@ -650,10 +627,9 @@ def find_qemu_support(system_os:string, feature:string):
         return component, command, found_result, expectation, test_result
     except (subprocess.CalledProcessError) as err:
         if err.stderr.decode("utf-8").strip():
-            ovmf_shared_functions.print_warning_message("Getting QEMU version error: ",
+            print_warning_message("Getting QEMU version error: ",
                                   err.stderr.decode("utf-8").strip())
         return component, command, found_result, expectation, test_result
-
 
 def test_all_ovmf_paths(system_os:string, min_commit_date):
     '''
@@ -670,11 +646,11 @@ def test_all_ovmf_paths(system_os:string, min_commit_date):
 
     # Get the default path
     ovmf_default_command, default_ovmf_path,\
-        is_default_pkg_install, default_pkg_date = ovmf_shared_functions.get_default_ovmf_path(
+        is_default_pkg_install, default_pkg_date = ovmf_functions.get_default_ovmf_path(
             system_os)
 
     # Get all of the manually built paths
-    built_ovmf_paths = ovmf_shared_functions.get_built_ovmf_paths()
+    built_ovmf_paths = ovmf_functions.get_built_ovmf_paths()
 
     # Paths found
     paths_found = []
@@ -703,7 +679,7 @@ def test_all_ovmf_paths(system_os:string, min_commit_date):
         for path in built_ovmf_paths:
             curr_path_true = False
             # Call to get commit date from given path
-            built_ovmf_date, built_command = ovmf_shared_functions.get_commit_date(
+            built_ovmf_date, built_command = ovmf_functions.get_commit_date(
                 path)
             # Call to compare path commit date with given minimum date for either SEV or SEV-ES
             # Current path meets minimum
@@ -722,47 +698,62 @@ def test_all_ovmf_paths(system_os:string, min_commit_date):
 
     return one_path_true, paths_found
 
-def check_bios_enablement():
+def check_sme_enablement():
     '''
-    Find in SEV/SME encryption is enabled in bios by looking at dmesg for notice.
-    Will only appear on 1.51 fw or newer. If message doesn't appear then test passes.
-    Test will only appear in results if test fails, since the test could pass if dmesg is emptied
-    or if an old fw is installed.
+    Find in SEV/SME encryption is enabled in bios by checking the MSR.
+    Looking at MSR address 0x0xC0010010 bit 23 for enablment.
     '''
     # Turns true if test passes
     test_result = False
     # Name of component being tested
-    component = "BIOS enablement"
+    component = "SME enabled"
     # Expected test result
-    expectation = "No notice (SEV enabled in BIOS)"
+    expectation = "MSR 0xC0010010 it 23 is 1"
     # Will change to what the test finds
-    found_result = None
+    found_result = ""
     # Command being used
-    command = "grep -w 'memory encryption not enabled by BIOS'"
+    command = "MSR 0xC0010010"
+
+    # Read MSR and check bit 23 for enablement
     try:
-        # Read using dmesg
-        dmesg_read = subprocess.run(
-            "dmesg", shell=True, check=True, capture_output=True)
-        # Grep for error message
-        test_string_raw = subprocess.run(command, shell=True,
-                                         input=dmesg_read.stdout, check=True, capture_output=True)
-        # Grab the test string
-        test_string = test_string_raw.stdout.decode('utf-8').strip()
-        # If the test string appears, assume SME is disabled in BIOS
-        if test_string:
-            # Grab error message and return test result
-            division_string = test_string.split(":")
-            found_result = ':'.join(division_string[-2:]).strip()
-        return component, command, found_result, expectation, test_result
-    except (subprocess.CalledProcessError) as err:
-        # Error in subprocess, print warning message
-        if err.stderr.decode("utf-8").strip():
-            ovmf_shared_functions.print_warning_message(
-                component, err.stderr.decode("utf-8").strip())
-        # BIOS message not found, SEV probably enabled in BIOS. This means the test passes,
-        # Or the dmesg message is unavailable on current fw.
-        elif err.returncode == 1 and not err.stderr.decode("utf-8").strip():
-            found_result = ''
+        msr_value = readmsr(0xC0010010)
+        bin_value = bin(msr_value)[2:][::-1]
+        meme_val = bin_value[23]
+        if int(meme_val) == 1:
             test_result = True
-        # Return results
+        found_result = "MSR 0xC0010010 bit 23 is " + str(meme_val)
         return component, command, found_result, expectation, test_result
+    # If OSerror, MSR failed, print warning and return failure
+    except OSError as err:
+        # Could not read the msr, print a warning and return a failure
+        print_warning_message(component, f"Failed to read the desired MSR: {err}")
+        # Return results
+        found_result = 'Failed to read MSR'
+        return component, command, found_result, expectation, test_result
+
+def check_if_sev_es_init():
+    '''
+    Use SEV_PLATFORM_STATUS ioctl to see if sev-es is initialized in the current system.
+    '''
+    # Turns true if test passes
+    test_result = False
+    # Name of component being tested
+    component = "SEV-ES INIT STATE"
+    # Will change to what the test finds
+    found_result = "EMPTY"
+    # Command being used
+    command = "SEV apis"
+    #Expected result
+    expectation = "1"
+
+    # Use SEV ioctl config es platform status to check for SEV-ES init.
+    sev_plat_status = ioctl.run_sev_platform_status()
+    sev_es_init_status = sev_plat_status.config_es
+
+    found_result = str(sev_es_init_status)
+
+    # If config is 1 then test passes
+    if sev_es_init_status == 1:
+        test_result = True
+
+    return component, command, found_result, expectation, test_result

@@ -10,6 +10,7 @@
     - [Stop at failure](#Stop-at-failure)
     - [Feature testing](#Feature-testing)
     - [nonVerbose](#nonverbose)
+    - [enablement](#enablement)
 - [Virtual machine tests](#Virtual-machine-tests)
     - [Test local](#Test-local)
     - [Print local](#Print-local)
@@ -17,79 +18,76 @@
 - [Testing](#Testing)
 
 # SEV component test
-This script is used to query a host system's capabilities to run SEV or SEV-ES encrypted virtual machines. It also checks for SME compatibility. It will run checks of several different components, and it will allow us to know if the host system is set-up correctly in order to support SEV features. If there are any more questions regarding SME, SEV or SEV-ES please visit [AMD'S SEV developer website](https://developer.amd.com/sev/).
+This script is used to query a host system's capabilities to use AMD'S encryption techonologies: SEV, SEV-ES and SEV-SNP. It can also checks for SME compatibility and TSME enablement. It will run checks of several different components, and it will allow the user to know if the host system is set-up correctly in order to use SEV features. If there are any more questions regarding SME, SEV SEV-ES, or SEV-SNP please visit [AMD'S SEV developer website](https://www.amd.com/en/developer/sev.htm).
 
 # Setting up host OS
-All OS distributions need to install 2 packages in order to run this tool. Installation for each package differs depending on the distro.
-Packages needed:
-- CPUID
-- python3 module packaging
+All OS distributions need to install some pip packages in order to run this tool. Installation for each package differs depending on the distro.
 
 In order to install all the required python packages, there is a requirements.txt file provided. To install the desired packages simply run:
 ```
 $ pip/pip3 install -r requirements.txt
 ```
 on the root directory of the project.
-## Ubuntu
-To install CPUID run command:
-```
-$ sudo apt install cpuid
-```
-## RHEL 8
-RHEL stopped supporting CPUID in their package manager, but it can still be installed.
-First install PERL using:
-```
-$ yum install perl
-```
-Then to install CPUID run command to install from original source:
-```
-$ rpm -i http://www.etallen.com/cpuid/cpuid-20220224-1.x86_64.rpm
-```
-## OpenSUSE-Tumbleweed
-To install CPUID run command:
-```
-$ zypper install cpuid
-```
+
 # Usage
 Once the host is set-up, in order to run the tool simply use:
 ```
-$ python ./sev_component_test/sev_component_test.py
+$ sudo python ./sev_component_test/sev_component_test.py
 ```
 This will initialize the check on the system and the results of the component test will appear on the terminal screen.
+Since the program is checking MSRs and CPUID functions, it will need to be run with root privileges.
 
 **PYTHON 3.8 OR NEWER IS REQUIRED TO RUN THE PROGRAM**
 
 There are flags that can be raised in order to use different features that the tool offers. These can be raised individually or a combination of them at the same time.
 
-Test example on Ubuntu:
+Test example on Ubuntu 22.04:
 ```
-Running SEV Component Test tool. For more running options, run 'python3 SEVComponentTest.py -h'.
-For more information please go to https://developer.amd.com/sev/
+Running SEV Component Test tool. For more running options, run 'python sev_component_test.py -h'.
+For more information please go to https://www.amd.com/en/developer/sev.htm/
 
 Querying for system capabilities:
-- CPUID function 0x8000001f bit 1 for SEV [ cpuid -r -1 -l 0x8000001f ] Found: EAX bit 1 is 1 Expected: EAX bit 1 to be '1' OK
+- CPUID function 0x8000001f bit 1 for SEV [ cpuid 0x8000001f ] Found: EAX bit 1 is True Expected: EAX bit 1 to be '1' OK
 - Virtualization capabilities [ lscpu | grep Virtualization ] Found: Virtualization: AMD-V Expected: Virtualization: AMD-V OK
+- SME enabled [ MSR 0xC0010010 ] Found: MSR 0xC0010010 bit 23 is 1 Expected: MSR 0xC0010010 it 23 is 1 OK
 SYSTEM SUPPORT PASS
 
 Comparing Host OS componenets to known SEV minimum versions:
-- Current OS distribution [ cat /etc/os-release ] Found: ubuntu 20.04 Expected: (comparing against known minimum version list) OK
-- Kernel [ uname -r ] Found: 5.13.0-28-generic Expected: 4.16 minimum OK
-- OS support for SEV [ dmesg | grep -w 'SEV supported' ] Found: SEV supported Expected: SEV supported OK
-- Available SEV ASIDS [ dmesg | grep -w 'SEV supported' ] Found: 493 ASIDs Expected: xxx ASIDs OK
-- Libvirt version [ virsh -V ] Found: 6.0.0 Expected: 4.5 minimum OK
-- LibVirt SEV enablement [ virsh domcapabilities | grep sev ] Found: <sev supported='yes'> Expected: <sev supported='yes'> OK
-- QEMU version [ qemu-system-x86_64 --version ] Found: 4.2.1 (Debian 1:4.2-3ubuntu6.21) Expected: 2.12 minimum OK
-- OMVF path install [ dpkg --list ] Found: /usr/share/OVMF/OVMF_VARS.fd 2019-11-22  Expected: 2018-07-06  OK
+- CPU model generation support [ cpuid 0x80000001 ] Found: SEV supported by milan Expected: naples or newer model OK
+- CPUID function 0x8000001f bit 1 for SEV [ cpuid 0x8000001f ] Found: EAX bit 1 is True Expected: EAX bit 1 to be '1' OK
+- Available SEV ASIDS [ cpuid 0x8000001f ] Found: 410 ASIDs Expected: xxx ASIDs OK
+- Current OS distribution [ cat /etc/os-release ] Found: ubuntu 22.04 Expected: (comparing against known minimum version list) OK
+- Kernel [ uname -r ] Found: 5.19.0-rc6-snp-host-c4daeffce Expected: 4.16 minimum OK
+- SEV INIT STATE [ SEV apis ] Found: 1 Expected: 1 OK
+- Libvirt version [ virsh -V ] Found: 8.0.0 Expected: 4.5 minimum OK
+- QEMU version [ qemu-system-x86_64 --version ] Found: 6.2.0 (Debian 1:6.2+dfsg-2ubuntu6.12) Expected: 2.12 minimum OK
+- OMVF path install [ dpkg --list ] Found: /usr/share/OVMF/OVMF_VARS.fd 2022-02-01  Expected: 2018-07-06  OK
+- OMVF path install [ git --git-dir /root/snp/setup/latest/AMDSEV/ovmf/.git show ] Found: /root/snp/setup/latest/AMDSEV/ovmf/Build/OvmfX64/DEBUG_GCC5/FV/OVMF_VARS.fd 2022-03-28  Expected: 2018-07-06  OK
 SEV COMPONENT TEST PASS
 
 Comparing Host OS componenets to known SEV-ES minimum versions:
-- Kernel [ uname -r ] Found: 5.13.0-28-generic Expected: 5.11 minimum OK
-- OS support for SEV-ES [ dmesg | grep SEV-ES ] Found: SEV-ES supported Expected: SEV-ES supported OK
-- Available SEV-ES ASIDS [ dmesg | grep SEV-ES ] Found: 16 ASIDs Expected: xxx ASIDs OK
-- Libvirt version [ virsh -V ] Found: 6.0.0 Expected: 4.5 minimum OK
-- QEMU version [ qemu-system-x86_64 --version ] Found: 4.2.1 (Debian 1:4.2-3ubuntu6.21) Expected: 6.0 minimum FAIL
-- OMVF path install [ dpkg --list ] Found: /usr/share/OVMF/OVMF_VARS.fd 2019-11-22  Expected: 2020-11-01  FAIL
-SEV-ES COMPONENT TEST FAIL
+- CPU model generation support [ cpuid 0x80000001 ] Found: SEV-ES supported by milan Expected: rome or newer model OK
+- CPUID function 0x8000001f bit 3 for SEV-ES [ cpuid 0x8000001f ] Found: EAX bit 3 is True Expected: EAX bit 3 to be '1' OK
+- Kernel [ uname -r ] Found: 5.19.0-rc6-snp-host-c4daeffce Expected: 5.11 minimum OK
+- Available SEV-ES ASIDS [ cpuid 0x8000001f ] Found: 99 ASIDs Expected: xxx ASIDs OK
+- SEV-ES INIT STATE [ SEV apis ] Found: 1 Expected: 1 OK
+- Libvirt version [ virsh -V ] Found: 8.0.0 Expected: 4.5 minimum OK
+- QEMU version [ qemu-system-x86_64 --version ] Found: 6.2.0 (Debian 1:6.2+dfsg-2ubuntu6.12) Expected: 6.0 minimum OK
+- OMVF path install [ dpkg --list ] Found: /usr/share/OVMF/OVMF_VARS.fd 2022-02-01  Expected: 2020-11-01  OK
+- OMVF path install [ git --git-dir /root/snp/setup/latest/AMDSEV/ovmf/.git show ] Found: /root/snp/setup/latest/AMDSEV/ovmf/Build/OvmfX64/DEBUG_GCC5/FV/OVMF_VARS.fd 2022-03-28  Expected: 2020-11-01  OK
+SEV-ES COMPONENT TEST PASS
+
+Comparing Host OS componenets to known SEV-SNP minimum versions:
+- CPU model generation support [ cpuid 0x80000001 ] Found: SEV-SNP supported by milan Expected: milan or newer model OK
+- CPUID function 0x8000001f bit 4 for SEV-SNP [ cpuid 0x8000001f ] Found: EAX bit 4 is True Expected: EAX bit 4 to be '1' OK
+- SNP enabled in MSR [ MSR 0xC0010010 ] Found: MSR 0xC0010010 bit 23 is 1 Expected: MSR 0xC0010010 bit 24 is 1 OK
+- System SEV firmware version [ SEV_PLATFORM_STATUS ] Found: 1.53 Expected: SEV-SNP API VERSION 1.51 OK
+- Checking IOMMU enablement [ find /sys/kernel/iommu_groups/ ] Found: /sys/kernel/iommu_groups/ exists Expected: /sys/kernel/iommu_groups/ exists OK
+- SNP INIT [ SNP_PLATFORM_STATUS ] Found: 1 Expected: 1 OK
+- RMP INIT [ SNP_PLATFORM_STATUS ] Found: 1 Expected: 1 OK
+- RMP table addresses [ MSR 0xC0010132 - 0xC0010133 ] Found: RMP table physical address range 0x39e00000 - 0x566fffff Expected: RMP table physical address range xxx - xxx OK
+- Comparing TCB versions [ SNP_PLATFORM_STATUS ] Found: Current TCB: 12180548142176927747 Reported TCB: 12180548142176927747 Expected: Current TCB matches reported TCB OK
+SEV-SNP COMPONENT TEST PASS
 ```
 ** Program will only check for components in the system PATH for qemu and libvirt. Components built from source code will need to be added to the PATH in order to be tested. **
 
@@ -115,7 +113,7 @@ $ python ./sev_component_test/sev_component_test.py -nv
 ```
 
 ## Feature testing
-This flag allows the user to pick what features to test for. By raising it the user can specify if they want to test for only one specific feature (SEV, SEV-ES or SME), all of them, or any combination of the 3. That way if the user is curious about only one feature, they can just test for that one, instead of having to test for all of them. **Note**: If testing for SEV-ES, SEV test will always run, since being able to run SEV is a prerequisite for SEV-ES. By default the program will only test for SEV and SEV-ES.
+This flag allows the user to pick what features to test for. By raising it the user can specify if they want to test for only one specific feature (SEV, SEV-ES, SEV-SNP or SME), all of them, or any combination of the 4. That way if the user is curious about only one feature, they can just test for that one, instead of having to test for all of them. **Note**: If testing for SEV-ES, the SEV test will always run, since being able to run SEV is a prerequisite for SEV-ES. The same goes for SEV-SNP with SEV and SEV-ES, since they're prerequisites for SEV-SNP. By default the program will only test for SEV, SEV-ES and SEV-SNP.
 To use this flag, use the command:
 ```
 $ python ./sev_component_test/sev_component_test.py --test [features to be tested]
@@ -124,12 +122,24 @@ or
 ```
 $ python ./sev_component_test/sev_component_test.py -t [features to be tested]
 ```
-Features (sev, sev-es or sme) written in lower-case and separated by a space.
+Features (sev, sev-es, sev-snp or sme) written in lower-case and separated by a space.
 
 Example feature testing for SME and SEV only:
 ```
 $ python ./sev_component_test/sev_component_test.py -t sme sev
 ```
+
+## Enablement
+This flag allows the user to only check for SEV enablement on the system. The test checks by default for package support for QEMU and libvirt, but somtimes a user will be interested on just knowing if SEV is enabled correctly in the system, and then run their own tests with different packages. The enablment flag will make it so that the test only checks for SEV (and other tested features) to be enabled correctly in the system.
+To use this flag, use the command:
+```
+$ python ./sev_component_test/sev_component_test.py --enablement
+```
+or
+```
+$ python ./sev_component_test/sev_component_test.py -e
+```
+
 # Virtual machine tests
 Along with the component test, there are three virtual machine utilities that can be used to make sure SEV is working correctly. They can be used by raising the appropriate flag. **Note**: The testlocal/printlocal utilities only work on VMs that were launched using QEMU. For more information on how to run SEV VMs, please visit [AMD'S SEV developer website](https://developer.amd.com/sev/).
 

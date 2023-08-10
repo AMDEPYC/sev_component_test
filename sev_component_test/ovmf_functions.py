@@ -2,17 +2,7 @@
 import subprocess
 import re
 import datetime
-
-def print_warning_message(component, warning):
-    '''
-    Warning message when a test runs into an error and the test can't be performed.
-    '''
-    yellow = '\033[93m'
-    reset_color = '\033[0m'
-    # Test can't be run due to certain set-ups in the system
-    print("- " + component + " test could not be performed. Error found: "
-          + warning + yellow + " WARNING" + reset_color)
-
+from message_printing import print_warning_message
 
 def get_ovmf_version(console_string):
     '''
