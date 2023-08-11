@@ -140,6 +140,17 @@ or
 $ python ./sev_component_test/sev_component_test.py -e
 ```
 
+## Test CPU
+This flag allows the user to run tests on unreleased/testing cpus. These cpus may be meant for testing or are prototypes, so some of their information are not public domain. The flag will skip tests that require public domain knowledge.
+
+```
+$ python ./sev_component_test/sev_component_test.py --testcpu
+```
+or
+```
+$ python ./sev_component_test/sev_component_test.py -tcpu
+```
+
 # Virtual machine tests
 Along with the component test, there are three virtual machine utilities that can be used to make sure SEV is working correctly. They can be used by raising the appropriate flag. **Note**: The testlocal/printlocal utilities only work on VMs that were launched using QEMU. For more information on how to run SEV VMs, please visit [AMD'S SEV developer website](https://developer.amd.com/sev/).
 
