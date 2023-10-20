@@ -21,11 +21,29 @@
 This script is used to query a host system's capabilities to use AMD'S encryption techonologies: SEV, SEV-ES and SEV-SNP. It can also checks for SME compatibility and TSME enablement. It will run checks of several different components, and it will allow the user to know if the host system is set-up correctly in order to use SEV features. If there are any more questions regarding SME, SEV SEV-ES, or SEV-SNP please visit [AMD'S SEV developer website](https://www.amd.com/en/developer/sev.htm).
 
 # Setting up host OS
-All OS distributions need to install some pip packages in order to run this tool. Installation for each package differs depending on the distro.
+All OS distributions need to install python-dev and some pip packages in order to run this tool. Installation for each package differs depending on the distro.
+
+In order to install the python-dev package you will need to run:
+
+**Ubuntu:**
+```
+$ sudo apt-get install python-dev
+```
+
+**Rhel/Fedora:**
+```
+$ sudo dnf install python-devel
+```
+
+**SUSE:**
+```
+$ sudo zypper install python-devel
+```
+
 
 In order to install all the required python packages, there is a requirements.txt file provided. To install the desired packages simply run:
 ```
-$ pip/pip3 install -r requirements.txt
+$ sudo pip/pip3 install -r requirements.txt
 ```
 on the root directory of the project.
 
@@ -95,60 +113,60 @@ SEV-SNP COMPONENT TEST PASS
 This flag causes the component test to stop running at the very first failure it reaches. This facilitates the visualization of individual failures, and allows the user to approach the checks individually if several of them are failing. 
 To use this flag, use the command:
 ```
-$ python ./sev_component_test/sev_component_test.py --stopfailure
+$ sudo python ./sev_component_test/sev_component_test.py --stopfailure
 ```
 or
 ```
-$ python ./sev_component_test/sev_component_test.py -s
+$ sudo python ./sev_component_test/sev_component_test.py -s
 ```
 
 ## NonVerbose
 This flag will run all the desired tests, but no text will be printed. It is intented for people that are using the tool as part of a script.
 ```
-$ python ./sev_component_test/sev_component_test.py --nonverbose
+$ sudo python ./sev_component_test/sev_component_test.py --nonverbose
 ```
 or
 ```
-$ python ./sev_component_test/sev_component_test.py -nv
+$ sudo python ./sev_component_test/sev_component_test.py -nv
 ```
 
 ## Feature testing
 This flag allows the user to pick what features to test for. By raising it the user can specify if they want to test for only one specific feature (SEV, SEV-ES, SEV-SNP or SME), all of them, or any combination of the 4. That way if the user is curious about only one feature, they can just test for that one, instead of having to test for all of them. **Note**: If testing for SEV-ES, the SEV test will always run, since being able to run SEV is a prerequisite for SEV-ES. The same goes for SEV-SNP with SEV and SEV-ES, since they're prerequisites for SEV-SNP. By default the program will only test for SEV, SEV-ES and SEV-SNP.
 To use this flag, use the command:
 ```
-$ python ./sev_component_test/sev_component_test.py --test [features to be tested]
+$ sudo python ./sev_component_test/sev_component_test.py --test [features to be tested]
 ```
 or
 ```
-$ python ./sev_component_test/sev_component_test.py -t [features to be tested]
+$ sudo python ./sev_component_test/sev_component_test.py -t [features to be tested]
 ```
 Features (sev, sev-es, sev-snp or sme) written in lower-case and separated by a space.
 
 Example feature testing for SME and SEV only:
 ```
-$ python ./sev_component_test/sev_component_test.py -t sme sev
+$ sudo python ./sev_component_test/sev_component_test.py -t sme sev
 ```
 
 ## Enablement
 This flag allows the user to only check for SEV enablement on the system. The test checks by default for package support for QEMU and libvirt, but somtimes a user will be interested on just knowing if SEV is enabled correctly in the system, and then run their own tests with different packages. The enablment flag will make it so that the test only checks for SEV (and other tested features) to be enabled correctly in the system.
 To use this flag, use the command:
 ```
-$ python ./sev_component_test/sev_component_test.py --enablement
+$ sudo python ./sev_component_test/sev_component_test.py --enablement
 ```
 or
 ```
-$ python ./sev_component_test/sev_component_test.py -e
+$ sudo python ./sev_component_test/sev_component_test.py -e
 ```
 
 ## Test CPU
 This flag allows the user to run tests on unreleased/testing cpus. These cpus may be meant for testing or are prototypes, so some of their information are not public domain. The flag will skip tests that require public domain knowledge.
 
 ```
-$ python ./sev_component_test/sev_component_test.py --testcpu
+$ sudo python ./sev_component_test/sev_component_test.py --testcpu
 ```
 or
 ```
-$ python ./sev_component_test/sev_component_test.py -tcpu
+$ sudo python ./sev_component_test/sev_component_test.py -tcpu
 ```
 
 # Virtual machine tests
@@ -158,11 +176,11 @@ Along with the component test, there are three virtual machine utilities that ca
 This utility will perform an encryption test on the memory of virtual machines that are currently running in the system. The user can provide the **full** command used to launch the VM in order to test that specific VM or it can leave the entry blank in order to launch an interactive menu where the user can pick what VMs to test for encryption.
 To test for a specific VM provided by the user:
 ```
-$ python ./sev_component_test/sev_component_test.py --testlocal "qemu-system-x86_64 -enable-kvm -cpu EPYC -machine q35 -smp 4,maxcpus=64 -m 2048M,slots=5,maxmem=30G -drive if=pflash,format=raw,unit=0,file=/usr/local/share/qemu/OVMF_CODE.fd,readonly -drive if=pflash,format=raw,unit=1,file=OVMF_VARS.fd -netdev user,id=vmnic -device e1000,netdev=vmnic,romfile= -drive file=ubuntu-18.04-server-cloudimg-amd64.img,if=none,id=disk0 -drive file=seed.iso,if=none,id=cd0 -object sev-guest,id=sev0,cbitpos=47,reduced-phys-bits=1 -machine memory-encryption=sev0 -nographic"
+$ sudo python ./sev_component_test/sev_component_test.py --testlocal "qemu-system-x86_64 -enable-kvm -cpu EPYC -machine q35 -smp 4,maxcpus=64 -m 2048M,slots=5,maxmem=30G -drive if=pflash,format=raw,unit=0,file=/usr/local/share/qemu/OVMF_CODE.fd,readonly -drive if=pflash,format=raw,unit=1,file=OVMF_VARS.fd -netdev user,id=vmnic -device e1000,netdev=vmnic,romfile= -drive file=ubuntu-18.04-server-cloudimg-amd64.img,if=none,id=disk0 -drive file=seed.iso,if=none,id=cd0 -object sev-guest,id=sev0,cbitpos=47,reduced-phys-bits=1 -machine memory-encryption=sev0 -nographic"
 ```
 or the user can leave the command blank to launch the UI:
 ```
-$ python ./sev_component_test/sev_component_test.py -tl
+$ sudo python ./sev_component_test/sev_component_test.py -tl
 
 Running local virtual machine encryption test:
 Input PID of the VM you would like to test memory for. After all the desired machines have been added, input q or quit to run tests.
@@ -190,11 +208,11 @@ The user can add as many VMs as it wants in the user menu, but it can only test 
 This utility is very similar to the test local one, the only difference is that instead of performing the encryption test on the memory, it will print 1 page of the memory for the given VMs. This allows the user to inspect the memory of the VMs in case that the encryption tests are returning unexpected results. 
 To run this utility, use the command:
 ```
-$ python ./sev_component_test/sev_component_test.py --printlocal
+$ sudo python ./sev_component_test/sev_component_test.py --printlocal
 ```
 or to print the memory of a specific VM the command can be provided too.
 ```
-$ python ./sev_component_test/sev_component_test.py -pl "qemu-system-x86_64 -enable-kvm -cpu EPYC -machine q35 -smp 4,maxcpus=64 -m 2048M,slots=5,maxmem=30G -drive if=pflash,format=raw,unit=0,file=/usr/local/share/qemu/OVMF_CODE.fd,readonly -drive if=pflash,format=raw,unit=1,file=OVMF_VARS.fd -netdev user,id=vmnic -device e1000,netdev=vmnic,romfile= -drive file=ubuntu-18.04-server-cloudimg-amd64.img,if=none,id=disk0 -drive file=seed.iso,if=none,id=cd0 -object sev-guest,id=sev0,cbitpos=47,reduced-phys-bits=1 -machine memory-encryption=sev0 -nographic"
+$ sudo python ./sev_component_test/sev_component_test.py -pl "qemu-system-x86_64 -enable-kvm -cpu EPYC -machine q35 -smp 4,maxcpus=64 -m 2048M,slots=5,maxmem=30G -drive if=pflash,format=raw,unit=0,file=/usr/local/share/qemu/OVMF_CODE.fd,readonly -drive if=pflash,format=raw,unit=1,file=OVMF_VARS.fd -netdev user,id=vmnic -device e1000,netdev=vmnic,romfile= -drive file=ubuntu-18.04-server-cloudimg-amd64.img,if=none,id=disk0 -drive file=seed.iso,if=none,id=cd0 -object sev-guest,id=sev0,cbitpos=47,reduced-phys-bits=1 -machine memory-encryption=sev0 -nographic"
 ```
 This feature can't be used if the nonVerbose flag is also raised.
 
@@ -225,11 +243,11 @@ This will pull down the qcow2 image from the lfs repository and will be availabl
 ### Run Test
 To launch this test use the command:
 ```
-$ python ./sev_component_test/sev_component_test.py --autotest [sev | unencrypted]
+$ sudo python ./sev_component_test/sev_component_test.py --autotest [sev | unencrypted]
 ```
 or
 ```
-$ python ./sev_component_test/sev_component_test.py -at
+$ sudo python ./sev_component_test/sev_component_test.py -at
 ```
 
 If the entry is left blank, then the tool will perform the sev test as a default.
