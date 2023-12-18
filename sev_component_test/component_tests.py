@@ -183,14 +183,18 @@ def get_processor_model():
     model = int(extended_model + base_model, 2)
 
     # Match family and model to known values
-    if (model, family) == (1,23):
+    if family == 23 and ( 0 <= model <= 15) :
         return 'naples'
-    elif (model, family) == (49,23):
+    elif family == 23 and (48 <= model <= 63):
         return 'rome'
-    elif (model, family) == (1, 25):
+    elif family == 25 and (0 <= model <= 15):
         return 'milan'
-    elif (model, family) == (17, 25):
+    elif family == 25 and (16 <= model <= 31):
         return 'genoa'
+    elif family == 25 and (160 <= model <= 175):
+        return 'bergamo'
+    elif family == 26 and (0 <= model <= 15):
+        return 'turin'
     else:
         return 'invalid cpu'
 
@@ -202,9 +206,9 @@ def validate_cpu_model(feature: str):
     test_result = False
     # dict to get values
     sev_dict = {
-        'SEV':["naples","rome","milan","genoa"],
-        'SEV-ES':["rome","milan", "genoa"],
-        'SEV-SNP': ["milan", "genoa"]
+        'SEV':["naples","rome","milan","genoa", "bergamo", "turin"],
+        'SEV-ES':["rome","milan", "genoa", "bergamo", "turin"],
+        'SEV-SNP': ["milan", "genoa", "bergamo", "turin"]
         }
     # Name of component being tested
     component = "CPU model generation support"
