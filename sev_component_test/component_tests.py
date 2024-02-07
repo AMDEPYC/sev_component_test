@@ -192,11 +192,27 @@ def get_processor_model():
     elif family == 25 and (16 <= model <= 31):
         return 'genoa'
     elif family == 25 and (160 <= model <= 175):
-        return 'bergamo'
+        socket = get_socket_type()
+        if socket == 4: 
+            return 'bergamo'
+        elif socket == 8:
+            return 'siena'
+        else:
+            return 'invalid cpu'
     elif family == 26 and (0 <= model <= 15):
         return 'turin'
     else:
         return 'invalid cpu'
+    
+def get_socket_type():
+    # Read ebx register from cpuid function
+    ebx = get_cpuid(0x80000001, 'ebx')
+    bin_value = bin(ebx)[2:][::-1]
+
+    # Bits 28:31 gives us socket type
+    socket_bin = bin_value[28:32][::-1]
+    # Return Socket Type
+    return int(socket_bin, 2)
 
 def validate_cpu_model(feature: str):
     '''
@@ -206,9 +222,9 @@ def validate_cpu_model(feature: str):
     test_result = False
     # dict to get values
     sev_dict = {
-        'SEV':["naples","rome","milan","genoa", "bergamo", "turin"],
-        'SEV-ES':["rome","milan", "genoa", "bergamo", "turin"],
-        'SEV-SNP': ["milan", "genoa", "bergamo", "turin"]
+        'SEV':["naples","rome","milan","genoa", "bergamo", "siena", "turin"],
+        'SEV-ES':["rome","milan", "genoa", "bergamo", "siena", "turin"],
+        'SEV-SNP': ["milan", "genoa", "bergamo", "siena", "turin"]
         }
     # Name of component being tested
     component = "CPU model generation support"
