@@ -199,12 +199,15 @@ def get_processor_model():
             return 'siena'
         else:
             return 'invalid cpu'
-    elif family == 26 and (0 <= model <= 15):
+    elif family == 26 and (0 <= model <= 17):
         return 'turin'
     else:
         return 'invalid cpu'
-    
+   
 def get_socket_type():
+    '''
+    Get the socket type from the cpuid.
+    '''
     # Read ebx register from cpuid function
     ebx = get_cpuid(0x80000001, 'ebx')
     bin_value = bin(ebx)[2:][::-1]
@@ -250,7 +253,7 @@ def validate_cpu_model(feature: str):
         found_result = feature + " supported by " + model
     else:
         found_result = feature + " not supported by " + model
-  
+ 
     return component, command, found_result, expectation, test_result
 
 
