@@ -26,11 +26,13 @@ def check_fw_version_for_snp():
     # Use sev platform status ioctl
     sev_plat_status = ioctl.run_sev_platform_status()
 
-    found_result = str(sev_plat_status.api_major) + "." + str(sev_plat_status.api_minor)
-
-    # Compare with 1.51 version
-    if version.parse(found_result) >= version.parse("1.51"):
-        test_result = True
+    if sev_plat_status:
+        found_result = str(sev_plat_status.api_major) + "." + str(sev_plat_status.api_minor)
+       
+        if version.parse(found_result) >= version.parse("1.51"):
+            test_result = True
+    else:
+        found_result = "IOCTL FAILED"
 
     return component, command, found_result, expectation, test_result
 
@@ -84,7 +86,11 @@ def check_snp_init():
 
     # Use snp ioclt to find if snp is init in the system
     snp_plat_status = ioctl.run_snp_platform_status()
-    found_result = str(snp_plat_status.state)
+
+    if snp_plat_status:
+        found_result = str(snp_plat_status.state)
+    else:
+        found_result = "IOCTL FAILED"
 
     if found_result == expectation:
         test_result = True
@@ -109,7 +115,10 @@ def check_rmp_init():
     #Use snp ioclt to find if rmp is init in the system
     snp_plat_status = ioctl.run_snp_platform_status()
 
-    found_result = str(snp_plat_status.is_rmp_init)
+    if snp_plat_status:
+        found_result = str(snp_plat_status.is_rmp_init)
+    else:
+        found_result = "IOCTL FAILED"
 
     if found_result == expectation:
         test_result = True
@@ -169,13 +178,16 @@ def compare_tcb_versions():
     # Use ioctl to get both tcb verion and reported tcb
     snp_plat_status = ioctl.run_snp_platform_status()
 
-    current_tcb = str(snp_plat_status.tcb_version)
-    reported_tcb = str(snp_plat_status.reported_tcb)
+    if snp_plat_status:
+        current_tcb = str(snp_plat_status.tcb_version)
+        reported_tcb = str(snp_plat_status.reported_tcb)
 
-    if reported_tcb == current_tcb:
-        test_result = True
-
-    found_result = "Current TCB: " + current_tcb + " Reported TCB: " + reported_tcb
+        if reported_tcb == current_tcb:
+            test_result = True
+        
+        found_result = "Current TCB: " + current_tcb + " Reported TCB: " + reported_tcb
+    else:
+        found_result = "IOCTL FAILED"
 
     return component, command, found_result, expectation, test_result
 

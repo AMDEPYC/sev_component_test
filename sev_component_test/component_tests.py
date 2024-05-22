@@ -545,7 +545,10 @@ def check_if_sev_init():
 
     # Call platform status ioctl and get the init state
     sev_plat_status = ioctl.run_sev_platform_status()
-    sev_init_status = sev_plat_status.state
+    if sev_plat_status:
+        sev_init_status = sev_plat_status.state
+    else:
+        sev_init_status = "IOCTL FAILED"
 
     found_result = str(sev_init_status)
 
@@ -771,7 +774,11 @@ def check_if_sev_es_init():
 
     # Use SEV ioctl config es platform status to check for SEV-ES init.
     sev_plat_status = ioctl.run_sev_platform_status()
-    sev_es_init_status = sev_plat_status.config_es
+    
+    if sev_plat_status:
+        sev_es_init_status = sev_plat_status.config_es
+    else:
+        sev_es_init_status = "IOCTL FAILED"
 
     found_result = str(sev_es_init_status)
 
