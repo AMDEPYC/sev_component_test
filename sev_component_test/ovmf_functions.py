@@ -2,6 +2,7 @@
 import subprocess
 import re
 import datetime
+import os
 from message_printing import print_warning_message
 
 def get_ovmf_version(console_string):
@@ -19,7 +20,7 @@ def get_ovmf_version(console_string):
     # Loop through the string received to get the version
     for char in console_string:
         # At the end of ovmf or 64
-        if char in ('f', '4'):
+        if char in ('f', '4') and not version_finder:
             version_finder = True
         # Going into version number
         elif char != ' ' and version_finder:
@@ -111,10 +112,15 @@ def get_default_ovmf_path(system_os):
         'centos': 'rpm -q edk2-ovmf'}
 
     # Where the package path is expected to be stored
+    default_path = None
     if system_os in ("opensuse-tumbleweed", "opensuse-leap"):
         default_path = '/usr/share/qemu/ovmf-x86_64-vars.bin'
     else:
-        default_path = '/usr/share/OVMF/OVMF_VARS.fd'
+        for possible_path in ["OVMF_VARS.fd", "OVMF_VARS_4M.fd" 
+                              "OVMF_CODE.fd", "OVMF_CODE_4M.fd", "OVMF.fd"]:
+            if os.path.exists("/usr/share/OVMF/" + possible_path):
+                default_path = "/usr/share/OVMF/" + possible_path
+                break
     # Date corresponding to the default OVMF version
     version_date = None
 
@@ -143,7 +149,7 @@ def get_default_ovmf_path(system_os):
         else:
             print_warning_message('Finding default ovmf package',
                                   err.stderr.decode("utf-8").strip())
-        return False, False, False, False
+        return command, False, False, False
 
 
 def get_built_ovmf_paths():

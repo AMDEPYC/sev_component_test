@@ -683,10 +683,17 @@ def test_all_ovmf_paths(system_os:string, min_commit_date):
 
     # No paths found
     if not is_default_pkg_install and not built_ovmf_paths:
-        return False, paths_found
+        paths_found.append({
+                'component': component,
+                'command': ovmf_default_command,
+                'found_result': "NO PATHS FOUND!",
+                'expectation': min_commit_date.strftime("%Y-%m-%d "),
+                'test_result': one_path_true
+            })
+        return one_path_true, paths_found
 
     # Path to default package in most distros
-    if is_default_pkg_install and os.path.exists(default_ovmf_path):
+    if is_default_pkg_install and default_ovmf_path:
         # Default package meets the minimum
         if default_pkg_date >= min_commit_date:
             one_path_true = True
@@ -700,7 +707,15 @@ def test_all_ovmf_paths(system_os:string, min_commit_date):
             'test_result': curr_path_true
         }
         paths_found.append(path_components)
-
+    elif is_default_pkg_install and not default_ovmf_path:
+        paths_found.append(path_components = {
+            'component': component,
+            'command': ovmf_default_command,
+            'found_result': "Could not find default installation path",
+            'expectation': min_commit_date.strftime("%Y-%m-%d "),
+            'test_result': curr_path_true
+        })
+   
     if built_ovmf_paths:
         for path in built_ovmf_paths:
             curr_path_true = False
