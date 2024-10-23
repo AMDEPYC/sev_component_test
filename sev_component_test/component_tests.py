@@ -759,6 +759,7 @@ def check_sme_enablement():
     try:
         msr_value = readmsr(0xC0010010)
         bin_value = bin(msr_value)[2:][::-1]
+        bin_value = bin_value.ljust(64, "0")
         meme_val = bin_value[23]
         if int(meme_val) == 1:
             test_result = True

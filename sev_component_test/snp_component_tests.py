@@ -55,6 +55,7 @@ def check_if_snp_enabled():
         # Read the MSR and bit value 24
         msr_value = readmsr(0xC0010010)
         bin_value = bin(msr_value)[2:][::-1]
+        bin_value = bin_value.ljust(64, "0")
         snp_val = bin_value[24]
         # If bit value equals 1 then test passes
         if int(snp_val) == 1:
