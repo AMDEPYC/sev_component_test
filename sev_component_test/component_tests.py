@@ -201,6 +201,12 @@ def get_processor_model():
             return 'invalid cpu'
     elif family == 26 and (0 <= model <= 17):
         return 'turin'
+    elif family == 26 and (
+        (80 <= model <= 87) or
+        (144 <= model <= 159) or
+        (160 <= model <= 175) or
+        (192 <= model <= 199)):
+        return "venice"
     else:
         return 'invalid cpu'
    
@@ -225,9 +231,9 @@ def validate_cpu_model(feature: str):
     test_result = False
     # dict to get values
     sev_dict = {
-        'SEV':["naples","rome","milan","genoa", "bergamo", "siena", "turin"],
-        'SEV-ES':["rome","milan", "genoa", "bergamo", "siena", "turin"],
-        'SEV-SNP': ["milan", "genoa", "bergamo", "siena", "turin"]
+        'SEV':["naples","rome","milan","genoa", "bergamo", "siena", "turin", "venice"],
+        'SEV-ES':["rome","milan", "genoa", "bergamo", "siena", "turin", "venice"],
+        'SEV-SNP': ["milan", "genoa", "bergamo", "siena", "turin", "venice"]
         }
     # Name of component being tested
     component = "CPU model generation support"
