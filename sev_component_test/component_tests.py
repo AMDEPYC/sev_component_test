@@ -536,31 +536,38 @@ def check_kernel(feature:str):
 
 def check_if_sev_init():
     '''
-    Use SEV_PLATFORM_STATUS ioctl to see if sev is initialized in the current system.
+    Use SEV_PLATFORM_STATUS ioctl to see if PSTATE is valid (INIT or WORKING)
     '''
     # Turns true if test passes
     test_result = False
     # Name of component being tested
-    component = "SEV INIT STATE"
+    component = "SEV PLATFORM STATE"
     # Will change to what the test finds
     found_result = "EMPTY"
     # Command being used
     command = "SEV apis"
     #Expected result
-    expectation = "1"
+    expectation = "1 (INIT) or 2 (WORKING)"
 
     # Call platform status ioctl and get the init state
     sev_plat_status = ioctl.run_sev_platform_status()
-    if sev_plat_status:
-        sev_init_status = sev_plat_status.state
-    else:
-        sev_init_status = "IOCTL FAILED"
 
-    found_result = str(sev_init_status)
+    if not sev_plat_status:
+        found_result = "IOCTL FAILED"
+        return component, command, found_result, expectation, test_result
 
-    # If 1 then sev is init
+    sev_init_status = sev_plat_status.state
+
     if sev_init_status == 1:
+        found_result = f"{sev_init_status} (INIT)"
         test_result = True
+    elif sev_init_status == 2:
+        found_result = f"{sev_init_status} (WORKING)"
+        test_result = True
+    elif sev_init_status == 0:
+        found_result = f"{sev_init_status} (UNINIT)"
+    else:
+        found_result = f"{sev_init_status} (UNKNOWN)"
 
     return component, command, found_result, expectation, test_result
 
