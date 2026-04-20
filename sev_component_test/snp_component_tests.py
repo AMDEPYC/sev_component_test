@@ -61,7 +61,7 @@ def check_if_snp_enabled():
         if int(snp_val) == 1:
             test_result = True
         # Result
-        found_result = "MSR 0xC0010010 bit 23 is " + str(snp_val)
+        found_result = "MSR 0xC0010010 bit 24 is " + str(snp_val)
         return component, command, found_result, expectation, test_result
     except OSError as err:
         # Could not read the msr, print a warning and return a failure
