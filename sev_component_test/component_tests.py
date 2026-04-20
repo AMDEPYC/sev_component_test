@@ -626,7 +626,7 @@ def find_qemu_support(system_os:string, feature:string):
     # Will change to what the test finds
     found_result = "EMPTY"
 
-    # List of knonw working commands to get the QEMU version in the system depending on the distro
+    # List of known working commands to get the QEMU version in the system depending on the distro
     qemu_command_list = {
         'ubuntu': 'qemu-system-x86_64 --version', 'debian': 'qemu-system-x86_64 --version',
         'fedora': 'qemu-system-x86_64 --version', 'rhel': '/usr/libexec/qemu-kvm --version',
@@ -634,8 +634,18 @@ def find_qemu_support(system_os:string, feature:string):
         'opensuse-leap': 'qemu-system-x86_64 --version',
         'centos': '/usr/libexec/qemu-kvm --version', 'oracle': '/usr/libexec/qemu-kvm --version'
     }
-    # Command being used
-    command = qemu_command_list.get(system_os, "kvm --version")
+
+    # Command being used (will be updated to the one that works)
+    command = "EMPTY"
+
+    if system_os in qemu_command_list:
+        qemu_commands = [qemu_command_list[system_os]]
+    else:
+        qemu_commands = list(dict.fromkeys(qemu_command_list.values()))
+        # Add generic fallbacks
+        for extra in ['qemu-kvm --version', 'kvm --version']:
+            if extra not in qemu_commands:
+                qemu_commands.append(extra)
 
     # Expected test result
     if feature == 'SEV':
@@ -649,26 +659,30 @@ def find_qemu_support(system_os:string, feature:string):
         print_warning_message(component, "Invalid feature provided")
         return component, command, found_result, expectation, test_result
 
-    try:
-        # Get QEMU version
-        qemu_version_read = subprocess.run(
-            command, shell=True, check=True, capture_output=True)
-        sed_read = subprocess.run("sed 's/.*version //'", shell=True,
-                                  input=qemu_version_read.stdout, check=True, capture_output=True)
-        # Grab call result
-        if sed_read:
-            found_result = sed_read.stdout.decode("utf-8").split('\n')[0]
-            qemu_version = get_version_num(found_result)
-            # If minimum version is met, test passes
-            if version.parse(qemu_version) >= version.parse(min_version):
-                test_result = True
-        # Return results
-        return component, command, found_result, expectation, test_result
-    except (subprocess.CalledProcessError) as err:
-        if err.stderr.decode("utf-8").strip():
-            print_warning_message("Getting QEMU version error: ",
-                                  err.stderr.decode("utf-8").strip())
-        return component, command, found_result, expectation, test_result
+    # Try all commands until one works
+    for cmd in qemu_commands:
+        try:
+            qemu_version_read = subprocess.run(
+                cmd, shell=True, check=True, capture_output=True)
+            command = cmd
+            sed_read = subprocess.run("sed 's/.*version //'", shell=True,
+                                      input=qemu_version_read.stdout, check=True, capture_output=True)
+            # Grab call result
+            if sed_read:
+                found_result = sed_read.stdout.decode("utf-8").split('\n')[0]
+                qemu_version = get_version_num(found_result)
+                # If minimum version is met, test passes
+                if version.parse(qemu_version) >= version.parse(min_version):
+                    test_result = True
+            break
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            continue
+
+    if command == "EMPTY":
+        print_warning_message(component, "QEMU not found")
+
+    # Return results
+    return component, command, found_result, expectation, test_result
 
 def test_all_ovmf_paths(system_os:string, min_commit_date):
     '''
@@ -708,26 +722,27 @@ def test_all_ovmf_paths(system_os:string, min_commit_date):
     # Path to default package in most distros
     if is_default_pkg_install and default_ovmf_path:
         # Default package meets the minimum
-        if default_pkg_date >= min_commit_date:
+        if default_pkg_date and default_pkg_date >= min_commit_date:
             one_path_true = True
             curr_path_true = True
         # Add default path results to the list.
         path_components = {
             'component': component,
             'command': ovmf_default_command,
-            'found_result': default_ovmf_path + ' ' + default_pkg_date.strftime("%Y-%m-%d "),
+            'found_result': default_ovmf_path + ' ' + (default_pkg_date.strftime("%Y-%m-%d ") if default_pkg_date else "UNKNOWN DATE"),
             'expectation': min_commit_date.strftime("%Y-%m-%d "),
             'test_result': curr_path_true
         }
         paths_found.append(path_components)
     elif is_default_pkg_install and not default_ovmf_path:
-        paths_found.append(path_components = {
+        path_components = {
             'component': component,
             'command': ovmf_default_command,
             'found_result': "Could not find default installation path",
             'expectation': min_commit_date.strftime("%Y-%m-%d "),
             'test_result': curr_path_true
-        })
+        }
+        paths_found.append(path_components)
    
     if built_ovmf_paths:
         for path in built_ovmf_paths:
@@ -737,14 +752,14 @@ def test_all_ovmf_paths(system_os:string, min_commit_date):
                 path)
             # Call to compare path commit date with given minimum date for either SEV or SEV-ES
             # Current path meets minimum
-            if built_ovmf_date >= min_commit_date:
+            if built_ovmf_date and built_ovmf_date >= min_commit_date:
                 one_path_true = True
                 curr_path_true = True
             # Add current path results to the list
             path_components = {
                 'component': component,
                 'command': built_command,
-                'found_result': path + ' ' + built_ovmf_date.strftime("%Y-%m-%d "),
+                'found_result': path + ' ' + (built_ovmf_date.strftime("%Y-%m-%d ") if built_ovmf_date else "UNKNOWN DATE"),
                 'expectation': min_commit_date.strftime("%Y-%m-%d "),
                 'test_result': curr_path_true
             }

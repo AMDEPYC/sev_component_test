@@ -44,18 +44,38 @@ def get_virtual_machines(system_os:string):
         'opensuse-tumbleweed': '[q]emu-system-x86_64', 'opensuse-leap': '[q]emu-system-x86_64',
         'centos': '[q]emu-kvm', 'oracle': '[q]emu-kvm'}
 
-    # Default command if distro not in list
-    qemu_command = qemu_command_list.get(system_os, "[q]emu")
+    if system_os in qemu_command_list:
+        qemu_commands = [qemu_command_list[system_os]]
+    else:
+        qemu_commands = list(dict.fromkeys(qemu_command_list.values()))
+        # Add generic fallback
+        if '[q]emu' not in qemu_commands:
+            qemu_commands.append('[q]emu')
+
+    available_vms = {}
 
     try:
         ps_read = subprocess.run('ps axo pid,command',
                                  shell=True, check=True, capture_output=True)
-        grep_qemu = subprocess.run(
-            'egrep ' + qemu_command, input=ps_read.stdout, shell=True, check=True, capture_output=True)
-        # Loop to get available VMs and their PIDs, put them into the dictionary.
-        found_vms = grep_qemu.stdout.decode('utf-8').split('\n')
-        found_vms.remove('')
-        return create_vm_dictionary(found_vms)
+
+        # Try all process names and collect results
+        for qemu_cmd in qemu_commands:
+            try:
+                grep_qemu = subprocess.run(
+                    'egrep ' + qemu_cmd, input=ps_read.stdout, shell=True, check=True, capture_output=True)
+                # Loop to get available VMs and their PIDs, put them into the dictionary.
+                found_vms = grep_qemu.stdout.decode('utf-8').split('\n')
+                for vm in found_vms:
+                    if vm:
+                        vm_info = create_vm_dictionary([vm])
+                        available_vms.update(vm_info)
+            except (subprocess.CalledProcessError):
+                continue
+
+        if not available_vms:
+            return None
+
+        return available_vms
     except (subprocess.CalledProcessError) as err:
         if err.stderr.decode("utf-8").strip():
             print("Could not find qemu VMs using ps axo. Error: " +
