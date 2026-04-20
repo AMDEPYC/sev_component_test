@@ -41,9 +41,25 @@ def launch_vm(system_os:string, current_directory:string,vm_type:str):
         'centos': '/usr/libexec/qemu-kvm', 'oracle': '/usr/libexec/qemu-kvm'
     }
 
-    # If not in known list, use qemu-kvm
-    # Command being used
-    qemu_command = qemu_command_list.get(system_os, "qemu-kvm")
+    if system_os in qemu_command_list:
+        qemu_commands = [qemu_command_list[system_os]]
+    else:
+        qemu_commands = list(dict.fromkeys(qemu_command_list.values()))
+        # Add generic fallback
+        if 'qemu-kvm' not in qemu_commands:
+            qemu_commands.append('qemu-kvm')
+        if 'kvm' not in qemu_commands:
+            qemu_commands.append('kvm')
+
+    # Command being used (will be updated to the one that works)
+    qemu_command = "qemu-kvm"
+    for cmd in qemu_commands:
+        try:
+            subprocess.run(cmd + " --version", shell=True, check=True, capture_output=True)
+            qemu_command = cmd
+            break
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            continue
 
     # Grab cbit for SEV use
     system_cbit = grab_cbit_from_cpuid()
