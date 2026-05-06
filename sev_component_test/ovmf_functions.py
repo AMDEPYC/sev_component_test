@@ -80,7 +80,7 @@ def get_default_ovmf_path(system_os):
 
     # Command list for given distro
     version_command_list = {
-        'ubuntu': "dpkg-query -f=${Version}' -W ovmf", 'debian': "dpkg-query -f='${Version}' -W ovmf",
+        'ubuntu': "dpkg-query -f='${Version}' -W ovmf", 'debian': "dpkg-query -f='${Version}' -W ovmf",
         'fedora': "rpm -q --qf '%{VERSION}' edk2-ovmf", 'rhel': "rpm -q --qf '%{VERSION}' edk2-ovmf",
         'opensuse-tumbleweed': "rpm -q --qf '%{VERSION}' ovmf", 'opensuse-leap': "rpm -q --qf '%{VERSION}' qemu-ovmf-x86_64",
         'centos': "rpm -q --qf '%{VERSION}' edk2-ovmf"}
