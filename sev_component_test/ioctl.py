@@ -100,14 +100,16 @@ class SevSnpPlatformSatus(ctypes.Structure):
     _fields_ = [('api_major', ctypes.c_uint8),
                 ('api_minor', ctypes.c_uint8),
                 ('state', ctypes.c_uint8),
-                ('is_rmp_init', ctypes.c_uint8, 1),
-                ('reserved', ctypes.c_uint8, 7),
+                ('flags', ctypes.c_uint8),
                 ('build_id', ctypes.c_uint32),
-                ('mask_chip_id', ctypes.c_uint8, 1),
-                ('reserved2', ctypes.c_uint32, 31),
+                ('config_flags', ctypes.c_uint8),
+                ('reserved2', ctypes.c_uint8 * 3),
                 ('guest_count', ctypes.c_uint32),
                 ('tcb_version', ctypes.c_uint64),
                 ('reported_tcb', ctypes.c_uint64)]
+    @property
+    def is_rmp_init(self):
+        return (self.flags >> 0) & 0x1
 
 SEV_IOC_TYPE: ctypes.c_char = 'S'
 
